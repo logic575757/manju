@@ -1943,6 +1943,8 @@ input[type="checkbox"] {
       《重生之我是大反派》
       <span class="text-xs">▼</span>
     </button>
+    <span id="scriptLockedBadge" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-brand-amber-soft text-brand-amber">已定稿</span>
+    <button id="unlockBtn" class="hidden text-xs text-brand-amber hover:underline" onclick="unlockScript()">解锁修改</button>
     <div id="scriptDropdown" class="hidden absolute top-12 left-1/2 -translate-x-1/2 bg-card border border-border rounded-xl wf-shadow p-2 w-52">
       <div class="text-xs text-muted-foreground px-2 py-1">最近编辑</div>
       <div class="px-2 py-1.5 text-sm hover:bg-muted rounded cursor-pointer">《重生之我是大反派》</div>
@@ -1951,8 +1953,9 @@ input[type="checkbox"] {
     </div>
   </div>
   <div class="flex items-center gap-3">
-    <button class="text-xs text-muted-foreground hover:text-foreground">帮助</button>
-    <div class="w-8 h-8 rounded-full bg-muted border border-border"></div>
+    <span id="headerUser" class="hidden text-xs text-muted-foreground"></span>
+    <button id="logoutBtn" class="hidden text-xs text-muted-foreground hover:text-foreground" onclick="doLogout()">退出</button>
+    <div id="headerGuest" class="text-xs text-muted-foreground">未登录</div>
   </div>
 </header>
 
@@ -1985,6 +1988,51 @@ input[type="checkbox"] {
 
 <!-- 主内容区 -->
 <main class="ml-[220px] pt-14 min-h-screen">
+  <!-- 登录/注册视图 -->
+  <div id="authView" class="hidden min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-sm">
+      <div class="text-center mb-8">
+        <div class="w-12 h-12 border-2 border-foreground flex items-center justify-center text-base font-bold mx-auto mb-4">MJ</div>
+        <h1 class="text-xl font-semibold mb-1">漫剧 AI 创作台</h1>
+        <p class="text-sm text-muted-foreground">登录后开始创作你的剧本</p>
+      </div>
+      <div class="wf-card p-6">
+        <div class="flex border-b border-border mb-5">
+          <button id="tabLogin" class="flex-1 py-2 text-sm font-medium border-b-2 border-primary text-primary">登录</button>
+          <button id="tabRegister" class="flex-1 py-2 text-sm font-medium border-b-2 border-transparent text-muted-foreground">注册</button>
+        </div>
+        <form id="loginForm" class="space-y-3">
+          <div>
+            <label class="block text-xs text-muted-foreground mb-1">用户名</label>
+            <input id="loginUsername" type="text" class="wf-input w-full" placeholder="demo" autocomplete="username">
+          </div>
+          <div>
+            <label class="block text-xs text-muted-foreground mb-1">密码</label>
+            <input id="loginPassword" type="password" class="wf-input w-full" placeholder="demo123" autocomplete="current-password">
+          </div>
+          <button type="submit" id="loginSubmit" class="wf-btn-primary w-full py-2 text-sm mt-2">登录</button>
+          <p class="text-xs text-muted-foreground text-center">演示账号: demo / demo123</p>
+        </form>
+        <form id="registerForm" class="space-y-3 hidden">
+          <div>
+            <label class="block text-xs text-muted-foreground mb-1">昵称</label>
+            <input id="regNickname" type="text" class="wf-input w-full" placeholder="你的昵称">
+          </div>
+          <div>
+            <label class="block text-xs text-muted-foreground mb-1">用户名</label>
+            <input id="regUsername" type="text" class="wf-input w-full" placeholder="登录用的账号" autocomplete="username">
+          </div>
+          <div>
+            <label class="block text-xs text-muted-foreground mb-1">密码</label>
+            <input id="regPassword" type="password" class="wf-input w-full" placeholder="至少6位" autocomplete="new-password">
+          </div>
+          <button type="submit" id="registerSubmit" class="wf-btn-primary w-full py-2 text-sm mt-2">注册并登录</button>
+        </form>
+        <p id="authError" class="hidden text-xs text-state-error mt-3 text-center"></p>
+      </div>
+    </div>
+  </div>
+
   <!-- 剧本列表视图（默认首页） -->
   
 
@@ -2792,7 +2840,13 @@ input[type="checkbox"] {
   </div>
 </div>
 
+<script src="/src/api.js"></script>
 <script>
+  /* ========== 全局应用状态 ========== */
+  let currentScriptId = null;
+  let currentScriptMeta = null;
+  let authInitialized = false;
+
   const steps = [
     { id: 0, title: '创作入口', desc: '选择 AI 生成或外部导入' },
     { id: 1, title: '大纲', desc: '分集结构与 AI 自审' },
@@ -5663,7 +5717,7 @@ input[type="checkbox"] {
     return {
       episodes: JSON.parse(JSON.stringify(episodes || [])),
       outlineData: typeof outlineData !== 'undefined' ? JSON.parse(JSON.stringify(outlineData)) : null,
-      characters: typeof characterTemplates !== 'undefined' ? JSON.parse(JSON.stringify(characterTemplates)) : null,
+      characters: typeof characterData !== 'undefined' ? JSON.parse(JSON.stringify(characterData)) : null,
     };
   }
   function _snapshotSummary(snap) {
@@ -5775,10 +5829,12 @@ input[type="checkbox"] {
     // 恢复快照到全局状态
     episodes = JSON.parse(JSON.stringify(ver.episodes || []));
     if (ver.outlineData && typeof outlineData !== 'undefined') {
-      outlineData = JSON.parse(JSON.stringify(ver.outlineData));
+      outlineData.length = 0;
+      JSON.parse(JSON.stringify(ver.outlineData || [])).forEach(m => outlineData.push(m));
     }
-    if (ver.characters && typeof characterTemplates !== 'undefined') {
-      characterTemplates = JSON.parse(JSON.stringify(ver.characters));
+    if (ver.characters && typeof characterData !== 'undefined') {
+      characterData.length = 0;
+      JSON.parse(JSON.stringify(ver.characters || [])).forEach(c => characterData.push(c));
     }
     currentVersionId = ver.id;
     scriptDirty = false;
@@ -5806,10 +5862,12 @@ input[type="checkbox"] {
     if (!target) return;
     episodes = JSON.parse(JSON.stringify(target.episodes || []));
     if (target.outlineData && typeof outlineData !== 'undefined') {
-      outlineData = JSON.parse(JSON.stringify(target.outlineData));
+      outlineData.length = 0;
+      JSON.parse(JSON.stringify(target.outlineData || [])).forEach(m => outlineData.push(m));
     }
-    if (target.characters && typeof characterTemplates !== 'undefined') {
-      characterTemplates = JSON.parse(JSON.stringify(target.characters));
+    if (target.characters && typeof characterData !== 'undefined') {
+      characterData.length = 0;
+      JSON.parse(JSON.stringify(target.characters || [])).forEach(c => characterData.push(c));
     }
     currentVersionId = target.id;
     scriptDirty = false;
@@ -6552,6 +6610,892 @@ input[type="checkbox"] {
       if (overlay) overlay.classList.remove('open');
     }
   });
+
+  /* ======================================================================
+   *  API Bridge：登录 / 剧本列表 / 剧本保存 / AI 流式
+   *  覆盖原型阶段的 alert / localStorage 占位实现，对接 FastAPI 后端
+   * ====================================================================== */
+
+  // ---------- 视图切换 ----------
+  const VIEW_AUTH = 'auth';
+  const VIEW_LIST = 'list';
+  const VIEW_FLOW = 'flow';
+  let currentView = null;
+
+  function showView(name) {
+    const authView = document.getElementById('authView');
+    const listView = document.getElementById('scriptListView');
+    const flowView = document.getElementById('creationFlowView');
+    const stepper = document.getElementById('stepperSection');
+    const wrap = document.getElementById('currentScriptWrap');
+    authView.classList.add('hidden');
+    listView.classList.add('hidden');
+    flowView.classList.add('hidden');
+    stepper.classList.add('hidden');
+    wrap.classList.add('hidden');
+    if (name === VIEW_AUTH) {
+      authView.classList.remove('hidden');
+      document.getElementById('headerGuest').classList.remove('hidden');
+      document.getElementById('headerUser').classList.add('hidden');
+      document.getElementById('logoutBtn').classList.add('hidden');
+    } else if (name === VIEW_LIST) {
+      listView.classList.remove('hidden');
+      updateHeaderUser();
+    } else if (name === VIEW_FLOW) {
+      flowView.classList.remove('hidden');
+      stepper.classList.remove('hidden');
+      wrap.classList.remove('hidden');
+      updateHeaderUser();
+    }
+    currentView = name;
+  }
+
+  function updateHeaderUser() {
+    const u = ApiClient.auth.getUser();
+    if (u) {
+      document.getElementById('headerGuest').classList.add('hidden');
+      const el = document.getElementById('headerUser');
+      const name = u.display_name || u.username;
+      el.textContent = name;
+      el.classList.remove('hidden');
+      document.getElementById('logoutBtn').classList.remove('hidden');
+    } else {
+      document.getElementById('headerGuest').classList.remove('hidden');
+      document.getElementById('headerUser').classList.add('hidden');
+      document.getElementById('logoutBtn').classList.add('hidden');
+    }
+  }
+
+  // ---------- 登录/注册 ----------
+  function setupAuth() {
+    const tabLogin = document.getElementById('tabLogin');
+    const tabRegister = document.getElementById('tabRegister');
+    const fLogin = document.getElementById('loginForm');
+    const fReg = document.getElementById('registerForm');
+    const errEl = document.getElementById('authError');
+    function showErr(msg) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
+    function clearErr() { errEl.classList.add('hidden'); errEl.textContent = ''; }
+    tabLogin.addEventListener('click', () => {
+      tabLogin.classList.add('border-primary','text-primary');
+      tabLogin.classList.remove('border-transparent','text-muted-foreground');
+      tabRegister.classList.remove('border-primary','text-primary');
+      tabRegister.classList.add('border-transparent','text-muted-foreground');
+      fLogin.classList.remove('hidden'); fReg.classList.add('hidden'); clearErr();
+    });
+    tabRegister.addEventListener('click', () => {
+      tabRegister.classList.add('border-primary','text-primary');
+      tabRegister.classList.remove('border-transparent','text-muted-foreground');
+      tabLogin.classList.remove('border-primary','text-primary');
+      tabLogin.classList.add('border-transparent','text-muted-foreground');
+      fReg.classList.remove('hidden'); fLogin.classList.add('hidden'); clearErr();
+    });
+    fLogin.addEventListener('submit', async (e) => {
+      e.preventDefault(); clearErr();
+      const btn = document.getElementById('loginSubmit');
+      const u = document.getElementById('loginUsername').value.trim();
+      const p = document.getElementById('loginPassword').value;
+      if (!u || !p) return showErr('请输入用户名和密码');
+      btn.disabled = true; btn.textContent = '登录中...';
+      try {
+        await ApiClient.auth.login(u, p);
+        await bootstrapAfterLogin();
+      } catch (err) {
+        showErr(err.message || '登录失败');
+      } finally {
+        btn.disabled = false; btn.textContent = '登录';
+      }
+    });
+    fReg.addEventListener('submit', async (e) => {
+      e.preventDefault(); clearErr();
+      const btn = document.getElementById('registerSubmit');
+      const n = document.getElementById('regNickname').value.trim();
+      const u = document.getElementById('regUsername').value.trim();
+      const p = document.getElementById('regPassword').value;
+      if (!u || !p || p.length < 6) return showErr('用户名必填、密码至少 6 位');
+      btn.disabled = true; btn.textContent = '注册中...';
+      try {
+        await ApiClient.auth.register(u, p, n || u);
+        await bootstrapAfterLogin();
+      } catch (err) {
+        showErr(err.message || '注册失败');
+      } finally {
+        btn.disabled = false; btn.textContent = '注册并登录';
+      }
+    });
+  }
+
+  window.__onAuthFail = function() {
+    showToast('登录已过期，请重新登录', 'error');
+    currentScriptId = null; currentScriptMeta = null;
+    showView(VIEW_AUTH);
+  };
+
+  async function doLogout() {
+    ApiClient.auth.logout();
+    currentScriptId = null; currentScriptMeta = null;
+    showToast('已退出登录');
+    showView(VIEW_AUTH);
+  }
+
+  // ---------- 剧本列表 ----------
+  async function loadScriptList() {
+    const listEl = document.getElementById('scriptListGrid');
+    if (!listEl) return;
+    listEl.innerHTML = '<div class="col-span-full text-center text-sm text-muted-foreground py-16">加载中...</div>';
+    try {
+      const res = await ApiClient.scripts.list({ page_size: 50 });
+      const items = res.items || res || [];
+      if (!items.length) {
+        listEl.innerHTML = '<div class="col-span-full text-center text-sm text-muted-foreground py-16">还没有剧本，点击右上角「新建剧本」开始创作</div>';
+        return;
+      }
+      listEl.innerHTML = items.map(renderScriptCard).join('');
+      renderRecentDropdown(items);
+    } catch (err) {
+      listEl.innerHTML = '<div class="col-span-full text-center text-sm text-state-error py-16">加载失败：' + escapeHtml(err.message || err) + '</div>';
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function statusLabel(s) {
+    const m = { draft:'草稿', outline:'大纲中', characters:'人物中', episodes:'分集中', final:'已定稿', archived:'已归档' };
+    return m[s] || s;
+  }
+
+  function renderScriptCard(s) {
+    const locked = s.locked_at ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-brand-amber-soft text-brand-amber">已定稿</span>' : '';
+    const del = s.deleted_at ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-state-error-soft text-state-error">已删除</span>' : '';
+    return '<div class="wf-card p-4 hover:shadow-lg transition-shadow flex flex-col" data-script-id="'+s.id+'">'
+      + '<div class="flex items-start justify-between mb-2">'
+      +   '<h3 class="text-base font-semibold truncate">《'+escapeHtml(s.title)+'》</h3>'
+      +   '<div class="flex gap-1 flex-shrink-0 ml-2">'+locked+del+'</div>'
+      + '</div>'
+      + '<div class="flex gap-1.5 mb-3 text-[11px] text-muted-foreground flex-wrap">'
+      +   '<span class="px-1.5 py-0.5 bg-muted rounded">'+statusLabel(s.status)+'</span>'
+      +   '<span class="px-1.5 py-0.5 bg-muted rounded">步骤 '+(s.step ?? 0)+'/3</span>'
+      +   (s.tags && s.tags.length ? s.tags.slice(0,3).map(t=>'<span class="px-1.5 py-0.5 bg-primary-soft text-primary rounded">'+escapeHtml(t)+'</span>').join('') : '')
+      + '</div>'
+      + '<p class="text-xs text-muted-foreground mb-4 line-clamp-2 min-h-[32px]">'+escapeHtml(s.logline || (s.config && s.config.themeTags && s.config.themeTags.join(' / ')) || '暂无简介')+'</p>'
+      + '<div class="mt-auto flex items-center justify-between gap-2">'
+      +   '<span class="text-[11px] text-muted-foreground">'+(s.updated_at ? new Date(s.updated_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '')+'</span>'
+      +   '<div class="flex gap-1">'
+      +     '<button class="wf-btn-ghost px-2 py-1 text-[11px]" onclick="duplicateScript('+s.id+')">复制</button>'
+      +     '<button class="wf-btn-primary px-3 py-1 text-[11px]" onclick="openScript('+s.id+')">'+(s.deleted_at?'恢复并编辑':'继续编辑')+'</button>'
+      +   '</div>'
+      + '</div>'
+      + '</div>';
+  }
+
+  function renderRecentDropdown(items) {
+    const dd = document.getElementById('scriptDropdown');
+    if (!dd) return;
+    const recent = items.slice(0, 5);
+    dd.innerHTML = '<div class="text-xs text-muted-foreground px-2 py-1">最近编辑</div>'
+      + recent.map(s => '<div class="px-2 py-1.5 text-sm hover:bg-muted rounded cursor-pointer" onclick="openScript('+s.id+')">《'+escapeHtml(s.title)+'》</div>').join('')
+      + '<div class="border-t border-border my-1"></div>'
+      + '<div class="px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded cursor-pointer" onclick="backToScriptList()">→ 返回剧本列表</div>';
+  }
+
+  // ---------- 创建剧本 / 打开剧本 ----------
+  async function createAndOpenScript(title, pathType, config) {
+    try {
+      const s = await ApiClient.scripts.create({
+        title: title || '未命名剧本',
+        path_type: pathType || 'A',
+        config: config || {},
+        step: 0, progress: 0, status: 'draft',
+      });
+      await openScript(s.id);
+      return s;
+    } catch (err) {
+      showToast('创建剧本失败：' + (err.message || err), 'error');
+      throw err;
+    }
+  }
+
+  async function openScript(id) {
+    try {
+      const s = await ApiClient.scripts.get(id);
+      currentScriptId = id;
+      currentScriptMeta = s;
+      // 恢复数据到内存
+      const content = s.content || {};
+      if (content.outline && Array.isArray(content.outline)) {
+        outlineData.length = 0;
+        content.outline.forEach(m => outlineData.push(m));
+      } else {
+        // 使用 mock 数据兜底，或保留现有硬编码 outlineData
+      }
+      if (content.characters && Array.isArray(content.characters)) {
+        characterData.length = 0;
+        content.characters.forEach(c => characterData.push(c));
+      }
+      if (content.episodes && Array.isArray(content.episodes)) {
+        episodes.length = 0;
+        content.episodes.forEach(e => episodes.push(e));
+      }
+      // 恢复路径
+      if (s.path_type === 'B') selectPath('B'); else selectPath('A');
+      // 更新 header 当前剧本名
+      const btn = document.getElementById('scriptNameBtn');
+      if (btn) btn.innerHTML = '《'+escapeHtml(s.title)+'》<span class="text-xs ml-1">▼</span>';
+      // 进入流程
+      showView(VIEW_FLOW);
+      // 跳到对应步骤
+      const step = Math.max(0, Math.min(3, s.step || 0));
+      setStep(step);
+      renderOutline(); renderCharacters(); renderEpisodes();
+      ensureEpisodesBuilt && ensureEpisodesBuilt();
+      if (typeof changeEpisode === 'function') changeEpisode(currentEpisodeId || (episodes[0] && episodes[0].id) || 1);
+      renderVersionSelect && renderVersionSelect();
+      syncLockBadge();
+      if (s.locked_at) showToast('该剧本已定稿，如需修改请先解锁', 'warning');
+      return s;
+    } catch (err) {
+      showToast('打开剧本失败：' + (err.message || err), 'error');
+    }
+  }
+
+  async function duplicateScript(id) {
+    try {
+      await ApiClient.scripts.duplicate(id);
+      showToast('已复制一份');
+      loadScriptList();
+    } catch (err) { showToast('复制失败：' + err.message, 'error'); }
+  }
+
+  // ---------- 进入创作流程 / 返回列表 ----------
+  async function enterCreationFlowBridge(path) {
+    // 先取标题
+    let title = '未命名剧本';
+    try {
+      const adv = document.getElementById('adv-appearance');
+      if (adv) {
+        const inp = adv.querySelector('input');
+        if (inp && inp.value && !/重生之都市修仙/.test(inp.value)) title = inp.value.replace(/[《》]/g,'');
+      }
+    } catch(e){}
+    // 采集配置
+    const config = (typeof collectPreset === 'function') ? collectPreset() : {};
+    const pathType = (path === 'import') ? 'B' : 'A';
+    const btn = document.getElementById('newScriptBtn');
+    if (btn) { btn.disabled = true; const origHTML = btn.innerHTML; btn.textContent = '创建中...'; }
+    try {
+      await createAndOpenScript(title, pathType, config);
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '+ 新建剧本 <span class="text-xs ml-1">▼</span>'; }
+    }
+  }
+  window.enterCreationFlow = enterCreationFlowBridge;
+
+  async function backToScriptListBridge() {
+    if (currentScriptId) {
+      await autosaveCurrent().catch(()=>{});
+    }
+    showView(VIEW_LIST);
+    await loadScriptList();
+  }
+  window.backToScriptList = backToScriptListBridge;
+
+  // ---------- 自动保存 ----------
+  let autosaveTimer = null;
+  function scheduleAutosave() {
+    if (!currentScriptId) return;
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(autosaveCurrent, 1500);
+  }
+  async function autosaveCurrent() {
+    if (!currentScriptId) return;
+    try {
+      const snapshot = (typeof _collectSnapshot === 'function')
+        ? _collectSnapshot()
+        : { episodes, outlineData, characters: characterData };
+      const step = currentStep || 0;
+      const progress = Math.round(step / 3 * 100);
+      await ApiClient.scripts.update(currentScriptId, {
+        content: snapshot,
+        step: step,
+        progress: progress,
+      });
+    } catch (err) {
+      console.warn('autosave failed', err);
+    }
+  }
+
+  // ---------- 保存版本 / 定稿 ----------
+  async function saveCurrentVersionBridge(note) {
+    if (!currentScriptId) return showToast('请先打开或创建剧本', 'error');
+    if (currentScriptMeta && currentScriptMeta.locked_at) {
+      return showToast('剧本已定稿，请先解锁再保存', 'error');
+    }
+    const defaultName = (typeof _autoVersionName === 'function') ? _autoVersionName() : new Date().toLocaleString();
+    const name = note || prompt('请输入版本名称（留空自动生成）：', '') || defaultName;
+    try {
+      const snapshot = (typeof _collectSnapshot === 'function') ? _collectSnapshot() : { episodes, outlineData, characters: characterData };
+      await ApiClient.scripts.update(currentScriptId, { content: snapshot });
+      const ver = await ApiClient.scripts.createVersion(currentScriptId, name);
+      scriptDirty = false;
+      showToast('版本已保存：' + (ver.name || name));
+      await refreshScriptMeta();
+      renderVersionSelect && renderVersionSelect();
+      return ver;
+    } catch (err) {
+      showToast('保存版本失败：' + err.message, 'error');
+    }
+  }
+  window.saveCurrentVersion = saveCurrentVersionBridge;
+
+  async function lockFinalBridge() {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    if (!confirm('定稿后将锁定剧本，无法再编辑。确定要定稿吗？')) return;
+    try {
+      await autosaveCurrent();
+      const s = await ApiClient.scripts.lock(currentScriptId);
+      currentScriptMeta = s;
+      syncLockBadge();
+      showToast('剧本已定稿', 'success');
+    } catch (err) { showToast('定稿失败：' + err.message, 'error'); }
+  }
+  window.lockFinal = lockFinalBridge;
+
+  async function refreshScriptMeta() {
+    if (!currentScriptId) return;
+    try { currentScriptMeta = await ApiClient.scripts.get(currentScriptId); syncLockBadge(); } catch(e){}
+  }
+
+  function syncLockBadge() {
+    const badge = document.getElementById('scriptLockedBadge');
+    const btn = document.getElementById('unlockBtn');
+    if (!badge || !btn) return;
+    const locked = !!(currentScriptMeta && currentScriptMeta.locked_at);
+    badge.classList.toggle('hidden', !locked);
+    btn.classList.toggle('hidden', !locked);
+  }
+
+  async function unlockScript() {
+    if (!currentScriptId) return;
+    if (!confirm('解锁后可以继续修改该剧本。确定解锁吗？')) return;
+    try {
+      const s = await ApiClient.scripts.unlock(currentScriptId);
+      currentScriptMeta = s;
+      syncLockBadge();
+      showToast('已解锁，可以继续编辑', 'success');
+    } catch (err) { showToast('解锁失败：' + err.message, 'error'); }
+  }
+  window.unlockScript = unlockScript;
+
+  // ---------- 版本切换 ----------
+  async function onVersionChangeBridge(val) {
+    if (!currentScriptId || !val) return;
+    if (val === '__new__') { saveCurrentVersionBridge(); return; }
+    try {
+      const ver = await ApiClient.scripts.getVersion(currentScriptId, val);
+      const c = ver.content || {};
+      if (!confirm('切换到版本「' + (ver.name || val) + '」？未保存内容将被覆盖。')) return;
+      if (c.outline) { outlineData.length = 0; c.outline.forEach(m=>outlineData.push(m)); }
+      if (c.characters) { characterData.length = 0; c.characters.forEach(x=>characterData.push(x)); }
+      if (c.episodes) { episodes.length = 0; c.episodes.forEach(e=>episodes.push(e)); }
+      currentVersionId = val;
+      scriptDirty = false;
+      renderOutline(); renderCharacters(); renderEpisodes();
+      if (typeof changeEpisode === 'function') changeEpisode(currentEpisodeId || (episodes[0] && episodes[0].id) || 1);
+      renderVersionSelect && renderVersionSelect();
+      showToast('已切换到版本：' + (ver.name || val));
+    } catch (err) { showToast('切换版本失败：' + err.message, 'error'); }
+  }
+  window.onVersionChange = onVersionChangeBridge;
+
+  // ---------- renderVersionSelect（从 API 拉取） ----------
+  async function renderVersionSelectBridge() {
+    const sel = document.getElementById('versionHistory');
+    if (!sel || !currentScriptId) return;
+    try {
+      const vers = await ApiClient.scripts.versions(currentScriptId);
+      const list = Array.isArray(vers) ? vers : [];
+      // 倒序展示（最新在最前）
+      list.sort((a,b) => (b.version_number||b.id||0) - (a.version_number||a.id||0));
+      const currentVerId = currentVersionId || null;
+      sel.innerHTML = '<option value="">— 选择版本 —</option>'
+        + list.map(v => '<option value="'+v.id+'"'+(String(v.id)===String(currentVerId)?' selected':'')+'>'
+          + (v.is_final?'🔒 v':'v') + (v.version_number||v.id)
+          + ' · ' + escapeHtml(v.name || v.commit_message || '未命名')
+          + '</option>').join('')
+        + '<option value="__new__">+ 保存新版本</option>'
+        + '<option value="__diff__">⇄ 版本对比</option>';
+      sel.onchange = () => {
+        const v = sel.value;
+        if (v === '__new__') { sel.value = currentVersionId || ''; saveCurrentVersionBridge(); return; }
+        if (v === '__diff__') { sel.value = currentVersionId || ''; showVersionDiffDialog(list); return; }
+        if (v) { onVersionChangeBridge(v); } else { sel.value = currentVersionId || ''; }
+      };
+    } catch (err) {
+      console.warn('load versions failed', err);
+    }
+  }
+  window.renderVersionSelect = renderVersionSelectBridge;
+
+  // ---------- 版本对比对话框 ----------
+  function showVersionDiffDialog(list) {
+    if (!list || list.length < 2) return showToast('至少需要 2 个版本才能对比', 'error');
+    const ov = document.createElement('div');
+    ov.className = 'fixed inset-0 bg-black/40 z-[70] flex items-center justify-center';
+    ov.innerHTML = '<div class="bg-card w-[520px] max-w-[92vw] rounded-xl p-5 shadow-xl max-h-[80vh] overflow-y-auto">'
+      + '<div class="flex items-center justify-between mb-3"><span class="text-sm font-semibold">版本对比</span>'
+      + '<button class="text-muted-foreground hover:text-foreground text-sm" onclick="this.closest(\'.fixed\').remove()">✕</button></div>'
+      + '<div class="grid grid-cols-2 gap-3 mb-3">'
+      + '<div><label class="text-xs text-muted-foreground">版本 A</label><select id="diffV1" class="wf-input w-full mt-1"></select></div>'
+      + '<div><label class="text-xs text-muted-foreground">版本 B</label><select id="diffV2" class="wf-input w-full mt-1"></select></div>'
+      + '</div>'
+      + '<button id="diffGoBtn" class="wf-btn-primary px-3 py-1 text-xs">对比</button>'
+      + '<div id="diffResult" class="mt-3 text-xs space-y-1"></div>'
+      + '</div>';
+    document.body.appendChild(ov);
+    const s1 = ov.querySelector('#diffV1'), s2 = ov.querySelector('#diffV2');
+    list.forEach(v => {
+      const label = 'v' + (v.version_number||v.id) + ' · ' + (v.name||v.commit_message||'未命名');
+      s1.insertAdjacentHTML('beforeend', '<option value="'+v.id+'">'+label+'</option>');
+      s2.insertAdjacentHTML('beforeend', '<option value="'+v.id+'">'+label+'</option>');
+    });
+    if (list.length >= 2) { s2.value = list[0].id; s1.value = list[1].id; }
+    ov.querySelector('#diffGoBtn').onclick = async () => {
+      const out = ov.querySelector('#diffResult');
+      out.innerHTML = '<div class="text-muted-foreground">对比中...</div>';
+      try {
+        const d = await ApiClient.scripts.diff(currentScriptId, s1.value, s2.value);
+        const changes = d.changes || [];
+        if (!changes.length) { out.innerHTML = '<div class="text-muted-foreground">两个版本内容一致</div>'; return; }
+        out.innerHTML = '<div class="text-muted-foreground mb-2">共 ' + (d.diff_count||changes.length) + ' 处差异</div>'
+          + changes.map(c => {
+            const path = (c.path || []).join(' / ');
+            const type = c.type || 'modified';
+            const color = type === 'added' ? 'text-emerald-600' : (type === 'removed' ? 'text-red-500' : 'text-amber-600');
+            return '<div class="p-2 border border-border rounded"><span class="'+color+' font-semibold">'+type+'</span> <span class="text-muted-foreground">'+escapeHtml(path)+'</span></div>';
+          }).join('');
+      } catch (err) { out.innerHTML = '<div class="text-red-500">对比失败：'+escapeHtml(err.message)+'</div>'; }
+    };
+  }
+
+  // ---------- AI 加载覆盖层 ----------
+  function showAiLoading(title, phaseText) {
+    let ov = document.getElementById('aiOverlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'aiOverlay';
+      ov.className = 'fixed inset-0 bg-black/40 z-[60] flex items-center justify-center';
+      ov.innerHTML = '<div class="bg-card w-[420px] max-w-[92vw] rounded-xl p-5 shadow-xl">'
+        + '<div class="flex items-center gap-2 mb-3"><div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>'
+        + '<span id="aiTitle" class="text-sm font-semibold"></span></div>'
+        + '<div id="aiPhase" class="text-xs text-muted-foreground mb-3"></div>'
+        + '<div id="aiProgress" class="w-full bg-muted rounded-full h-1.5 mb-3 overflow-hidden"><div class="bg-primary h-full transition-all" style="width:0%"></div></div>'
+        + '<div id="aiLog" class="text-xs text-muted-foreground max-h-40 overflow-y-auto space-y-1"></div>'
+        + '<button id="aiCancel" class="wf-btn-ghost px-3 py-1 text-xs mt-3">取消</button></div>';
+      document.body.appendChild(ov);
+    }
+    ov.classList.remove('hidden');
+    document.getElementById('aiTitle').textContent = title || 'AI 生成中';
+    document.getElementById('aiPhase').textContent = phaseText || '正在处理...';
+    document.getElementById('aiLog').innerHTML = '';
+    document.getElementById('aiProgress').firstChild.style.width = '5%';
+    return ov;
+  }
+  function hideAiLoading() {
+    const ov = document.getElementById('aiOverlay');
+    if (ov) ov.classList.add('hidden');
+  }
+  function aiLog(msg) {
+    const box = document.getElementById('aiLog');
+    if (!box) return;
+    const d = document.createElement('div');
+    d.textContent = '· ' + msg;
+    box.appendChild(d);
+    box.scrollTop = box.scrollHeight;
+  }
+  function aiProgress(pct) {
+    const bar = document.getElementById('aiProgress');
+    if (bar && bar.firstChild) bar.firstChild.style.width = Math.max(5, Math.min(99, pct)) + '%';
+  }
+
+  // ---------- 大纲生成 ----------
+  async function generateOutlineBridge() {
+    if (!currentScriptId) {
+      await enterCreationFlowBridge('ai');
+      if (!currentScriptId) return;
+    }
+    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
+    const form = (typeof collectPreset === 'function') ? collectPreset() : {};
+    let theme = form.theme || '';
+    try {
+      const adv = document.getElementById('adv-appearance');
+      if (adv) { const inp = adv.querySelector('input'); if (inp) theme = inp.value || theme; }
+    } catch(e){}
+    const ov = showAiLoading('AI 生成大纲', '连接 AI 服务...');
+    let aborted = false;
+    const ctrl = ApiClient.ai.generateOutline(currentScriptId, {
+      theme: theme,
+      theme_tags: form.themeTags || [],
+      plot_tags: form.plotTags || [],
+      time_setting: form.timeSetting || '现代',
+      emotion_tags: form.emotionTags || [],
+      total_episodes: form.totalEpisodes || 12,
+      episode_duration_sec: form.epDuration || 60,
+      style: form.style || '爽文节奏',
+      prompt: form.prompt || '',
+    }, {
+      onPhase(p) { const msg = p.message || p.phase || '...'; document.getElementById('aiPhase').textContent = msg; aiLog(msg); aiProgress(p.progress || 30); },
+      onResult(res) {
+        let mods = [];
+        if (res && Array.isArray(res.modules)) mods = res.modules;
+        else if (res && Array.isArray(res.outline)) mods = res.outline;
+        else if (Array.isArray(res)) mods = res;
+        if (mods.length) {
+          outlineData.length = 0;
+          mods.forEach(m => outlineData.push(m));
+        }
+        showToast('大纲生成完成，共 ' + outlineData.length + ' 个模块', 'success');
+        setStep(1);
+        renderOutline();
+        if (typeof renderOutlineToc === 'function') renderOutlineToc();
+      },
+      onDone() { if (!aborted) { hideAiLoading(); autosaveCurrent(); } },
+      onError(err) { hideAiLoading(); showToast('生成失败：' + err.message, 'error'); },
+    });
+    document.getElementById('aiCancel').onclick = () => { aborted = true; ctrl.abort(); hideAiLoading(); };
+  }
+  window.generateOutline = generateOutlineBridge;
+
+  // ---------- 导入解析 ----------
+  async function parseImportBridge() {
+    if (!currentScriptId) {
+      await enterCreationFlowBridge('import');
+      if (!currentScriptId) return;
+    }
+    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
+    const textEl = document.getElementById('impText');
+    let fileInput = document.getElementById('impFile');
+    const title = (document.getElementById('impFileName')||{}).value || '导入剧本';
+    const raw = textEl ? textEl.value : '';
+    if (!raw && (!fileInput || !fileInput.files || !fileInput.files[0])) {
+      return showToast('请粘贴文本或选择文件', 'error');
+    }
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      const ov = showAiLoading('上传与解析', '上传中...');
+      try {
+        const res = await ApiClient.imports.upload(title, fileInput.files[0], currentScriptId, p => aiProgress(p*100));
+        aiLog('上传完成，开始解析...');
+        await runParseStream(res.script_id || currentScriptId, { raw_text: res.raw_text || '', import_id: res.id });
+        return;
+      } catch (err) { hideAiLoading(); return showToast('上传失败：' + err.message, 'error'); }
+    }
+    const ov = showAiLoading('解析小说文本', '解析中...');
+    await runParseStream(currentScriptId, { raw_text: raw });
+  }
+  async function runParseStream(scriptId, params) {
+    let aborted = false;
+    const ctrl = ApiClient.ai.parseImport(scriptId, params, {
+      onPhase(p) { const msg = p.message || p.phase; document.getElementById('aiPhase').textContent = msg; aiLog(msg); aiProgress(p.progress||30); },
+      onResult(res) {
+        if (res.outline) { outlineData.length = 0; res.outline.forEach(m=>outlineData.push(m)); }
+        if (res.characters) { characterData.length = 0; res.characters.forEach(c=>characterData.push(c)); }
+        if (res.episodes) { episodes.length = 0; res.episodes.forEach(e=>episodes.push(e)); }
+        showToast('解析完成', 'success');
+        setStep(1); renderOutline(); renderCharacters(); renderEpisodes();
+      },
+      onDone() { if (!aborted) { hideAiLoading(); autosaveCurrent(); } },
+      onError(err) { hideAiLoading(); showToast('解析失败：' + err.message, 'error'); },
+    });
+    document.getElementById('aiCancel').onclick = () => { aborted = true; ctrl.abort(); hideAiLoading(); };
+  }
+  window.parseImport = parseImportBridge;
+
+  // ---------- 单模块 AI 修改 ----------
+  async function runSingleAiModifyBridge(modId) {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
+    const mod = outlineData.find(m => m.id === modId);
+    if (!mod) return;
+    const note = (outlineState.userNotes && outlineState.userNotes[modId]) || '';
+    const instruction = note || prompt('请输入对模块「' + (mod.title || modId) + '」的修改要求：', note);
+    if (!instruction) return;
+    showAiLoading('AI 修改：' + (mod.title || modId), '正在改写...');
+    let aborted = false;
+    const ctrl = ApiClient.ai.modifyModule(currentScriptId, modId, instruction, mod.content || mod, {
+      onPhase(p) { const msg=p.message||p.phase; document.getElementById('aiPhase').textContent=msg; aiLog(msg); aiProgress(p.progress||40); },
+      onResult(res) {
+        const newMod = res.module || res;
+        const idx = outlineData.findIndex(m => m.id === modId);
+        if (idx >= 0 && newMod && typeof newMod === 'object') {
+          outlineData[idx] = { ...outlineData[idx], ...newMod, id: modId };
+          renderOutline();
+          if (typeof renderOutlineToc === 'function') renderOutlineToc();
+          showToast('模块改写完成', 'success');
+        }
+      },
+      onDone() { if (!aborted) { hideAiLoading(); autosaveCurrent(); } },
+      onError(err) { hideAiLoading(); showToast('改写失败：' + err.message, 'error'); },
+    });
+    document.getElementById('aiCancel').onclick = () => { aborted = true; ctrl.abort(); hideAiLoading(); };
+  }
+  window.runSingleAiModify = runSingleAiModifyBridge;
+
+  // ---------- 批量修改 ----------
+  async function runBatchAiModifyBridge() {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
+    const modIds = Array.from(outlineState.queuedModules || []);
+    if (!modIds.length) return showToast('请先加入批量队列', 'error');
+    const globalNote = document.getElementById('globalNote') ? document.getElementById('globalNote').value : '';
+    const modules = modIds.map(id => {
+      const m = outlineData.find(x => x.id === id);
+      return { id, instruction: (outlineState.userNotes && outlineState.userNotes[id]) || '', current_content: m };
+    });
+    showAiLoading('批量修改 ' + modIds.length + ' 个模块', '处理中...');
+    let aborted = false;
+    let done = 0;
+    const ctrl = ApiClient.ai.batchModify(currentScriptId, modules, globalNote, {
+      onPhase(p) { const msg=p.message||p.phase; document.getElementById('aiPhase').textContent=msg; aiLog(msg); aiProgress(p.progress || (done/modIds.length*80+10)); },
+      onModule(m) {
+        done++; aiProgress(done/modIds.length*80+10);
+        const mid = m.moduleId || m.id;
+        aiLog('完成模块 ' + mid);
+        if (m.module) { const idx = outlineData.findIndex(x=>x.id===mid); if(idx>=0) outlineData[idx]={...outlineData[idx],...m.module,id:mid}; }
+      },
+      onResult(res) {
+        outlineState.queuedModules.clear();
+        renderOutline();
+        if (typeof renderModifyQueue === 'function') renderModifyQueue();
+        if (typeof renderOutlineToc === 'function') renderOutlineToc();
+        showToast('批量修改完成，已更新 ' + done + ' 个模块', 'success');
+      },
+      onDone() { if (!aborted) { hideAiLoading(); autosaveCurrent(); } },
+      onError(err) { hideAiLoading(); showToast('批量修改失败：' + err.message, 'error'); },
+    });
+    document.getElementById('aiCancel').onclick = () => { aborted = true; ctrl.abort(); hideAiLoading(); };
+  }
+  window.runBatchAiModify = runBatchAiModifyBridge;
+
+  // ---------- 大纲自审 ----------
+  async function reviewOutlineBridge() {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    showAiLoading('大纲 AI 自审', '自审中...');
+    let aborted = false;
+    const ctrl = ApiClient.ai.reviewOutline(currentScriptId, outlineData, {
+      onPhase(p) { const msg=p.message||p.phase; document.getElementById('aiPhase').textContent=msg; aiLog(msg); aiProgress(p.progress||30); },
+      onResult(res) {
+        const issues = (res && res.issues) ? res.issues : (Array.isArray(res) ? res : []);
+        if (outlineState.checkedIssues) outlineState.checkedIssues.clear();
+        outlineData.forEach(m => { if (m.issues) delete m.issues; });
+        (Array.isArray(issues) ? issues : []).forEach(it => {
+          const mod = outlineData.find(m => m.id === (it.moduleId || it.module_id));
+          if (mod) {
+            if (!mod.issues) mod.issues = [];
+            mod.issues.push({ severity: it.severity || 'warn', message: it.message || it.text || JSON.stringify(it), category: it.category });
+          }
+        });
+        renderOutline();
+        if (typeof renderOutlineToc === 'function') renderOutlineToc();
+        showToast('自审完成，发现 ' + (Array.isArray(issues) ? issues.length : 0) + ' 个问题', 'success');
+      },
+      onDone() { if (!aborted) hideAiLoading(); },
+      onError(err) { hideAiLoading(); showToast('自审失败：' + err.message, 'error'); },
+    });
+    document.getElementById('aiCancel').onclick = () => { aborted = true; ctrl.abort(); hideAiLoading(); };
+  }
+  function bindOutlineReview() {
+    const btns = document.querySelectorAll('#outlineBottomBar button');
+    btns.forEach(b => {
+      if (/自审/.test(b.textContent)) b.onclick = reviewOutlineBridge;
+    });
+  }
+
+  // ---------- 人物生成 ----------
+  async function generateCharactersBridge() {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
+    showAiLoading('AI 生成人物小传', '生成中...');
+    let aborted = false;
+    const ctrl = ApiClient.ai.generateCharacters(currentScriptId, outlineData, {
+      onPhase(p) { const msg=p.message||p.phase; document.getElementById('aiPhase').textContent=msg; aiLog(msg); aiProgress(p.progress||30); },
+      onResult(res) {
+        const list = res.characters || res;
+        if (Array.isArray(list)) {
+          characterData.length = 0;
+          list.forEach(c => characterData.push(c));
+        }
+        renderCharacters();
+        showToast('人物生成完成，共 ' + characterData.length + ' 位角色', 'success');
+      },
+      onDone() { if (!aborted) { hideAiLoading(); autosaveCurrent(); } },
+      onError(err) { hideAiLoading(); showToast('生成人物失败：' + err.message, 'error'); },
+    });
+    document.getElementById('aiCancel').onclick = () => { aborted = true; ctrl.abort(); hideAiLoading(); };
+  }
+  function injectCharGenBtn() {
+    const addBtn = document.querySelector('button[onclick="addCharacter()"]');
+    if (!addBtn || addBtn.dataset.injected) return;
+    addBtn.dataset.injected = '1';
+    const ai = document.createElement('button');
+    ai.className = 'wf-btn-primary px-3 py-1 text-xs ml-2';
+    ai.textContent = 'AI 生成人物';
+    ai.onclick = generateCharactersBridge;
+    addBtn.parentNode.insertBefore(ai, addBtn.nextSibling);
+  }
+
+  // ---------- 分集生成 ----------
+  async function generateEpisodeContentBridge(id) {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
+    id = id || currentEpisodeId || 1;
+    const ep = episodes.find(e => String(e.id) === String(id));
+    if (!ep) return showToast('未找到分集', 'error');
+    showAiLoading('AI 生成分集：' + (ep.title || '第' + id + '集'), '生成分镜/镜头/表演...');
+    let aborted = false;
+    const ctrl = ApiClient.ai.generateEpisode(currentScriptId, Number(id) || id, episodes, outlineData, characterData, {
+      onPhase(p) { const msg=p.message||p.phase; document.getElementById('aiPhase').textContent=msg; aiLog(msg); aiProgress(p.progress||30); },
+      onResult(res) {
+        const newEp = res.episode || res;
+        if (newEp && typeof newEp === 'object') {
+          const idx = episodes.findIndex(e => String(e.id) === String(id));
+          if (idx >= 0) episodes[idx] = { ...episodes[idx], ...newEp, id: episodes[idx].id };
+          else episodes.push({ ...newEp, id: Number(id)||id });
+        }
+        renderEpisodes();
+        if (typeof changeEpisode === 'function') changeEpisode(id);
+        showToast('分集生成完成', 'success');
+      },
+      onDone() { if (!aborted) { hideAiLoading(); autosaveCurrent(); } },
+      onError(err) { hideAiLoading(); showToast('生成分集失败：' + err.message, 'error'); },
+    });
+    document.getElementById('aiCancel').onclick = () => { aborted = true; ctrl.abort(); hideAiLoading(); };
+  }
+  window.generateEpisodeContent = generateEpisodeContentBridge;
+
+  // ---------- 分集修复 ----------
+  async function runAIFixBridge() {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
+    const ep = episodes.find(e => String(e.id) === String(currentEpisodeId));
+    if (!ep) return;
+    const issues = (typeof episodeIssues !== 'undefined' && episodeIssues[currentEpisodeId]) || [];
+    if (!issues.length) return showToast('当前集没有待修复问题', 'error');
+    const selected = issues.filter(i => !i.done);
+    if (!selected.length) return showToast('请选择要修复的问题', 'error');
+    showAiLoading('AI 修复分集问题', '修复中...');
+    let aborted = false;
+    const ctrl = ApiClient.ai.fixEpisode(currentScriptId, ep, selected, outlineData, {
+      onPhase(p) { const msg=p.message||p.phase; document.getElementById('aiPhase').textContent=msg; aiLog(msg); aiProgress(p.progress||30); },
+      onResult(res) {
+        const newEp = res.episode || res;
+        if (newEp && typeof newEp === 'object') {
+          const idx = episodes.findIndex(e => String(e.id) === String(currentEpisodeId));
+          if (idx >= 0) episodes[idx] = { ...episodes[idx], ...newEp, id: episodes[idx].id };
+          selected.forEach(i => { i.done = true; });
+          renderEpisodes();
+          if (typeof changeEpisode === 'function') changeEpisode(currentEpisodeId);
+          if (typeof renderEpisodeIssues === 'function') renderEpisodeIssues();
+          showToast('已修复 ' + selected.length + ' 个问题', 'success');
+        }
+      },
+      onDone() { if (!aborted) { hideAiLoading(); autosaveCurrent(); } },
+      onError(err) { hideAiLoading(); showToast('修复失败：' + err.message, 'error'); },
+    });
+    document.getElementById('aiCancel').onclick = () => { aborted = true; ctrl.abort(); hideAiLoading(); };
+  }
+  window.runAIFix = runAIFixBridge;
+
+  // ---------- 通过按钮 - 保存并推进步骤 ----------
+  const _origConfirmPassToStep2 = (typeof confirmPassToStep2 === 'function') ? confirmPassToStep2 : null;
+  async function confirmPassToStep2Bridge() {
+    await autosaveCurrent();
+    if (_origConfirmPassToStep2) _origConfirmPassToStep2();
+    if (currentScriptId) {
+      await ApiClient.scripts.update(currentScriptId, { step: 2, progress: 66 }).catch(()=>{});
+      await refreshScriptMeta();
+    }
+    injectCharGenBtn();
+  }
+  window.confirmPassToStep2 = confirmPassToStep2Bridge;
+
+  const _origConfirmPassToStep4 = (typeof confirmPassToStep4 === 'function') ? confirmPassToStep4 : null;
+  async function confirmPassToStep4Bridge() {
+    await autosaveCurrent();
+    if (_origConfirmPassToStep4) _origConfirmPassToStep4();
+    if (currentScriptId) {
+      await ApiClient.scripts.update(currentScriptId, { step: 3, progress: 100 }).catch(()=>{});
+      await refreshScriptMeta();
+    }
+  }
+  window.confirmPassToStep4 = confirmPassToStep4Bridge;
+
+  // 输入事件钩子：脏标记触发自动保存
+  document.addEventListener('input', () => { scheduleAutosave(); }, true);
+
+  // ---------- 启动 ----------
+  function prepareScriptListContainer() {
+    const listView = document.getElementById('scriptListView');
+    if (!listView) return;
+    let grid = document.getElementById('scriptListGrid');
+    if (grid) return;
+    const cards = listView.querySelectorAll('.wf-card');
+    let container = null;
+    cards.forEach(c => { const p = c.parentElement; if (!container || p.children.length > container.children.length) container = p; });
+    if (container) {
+      container.id = 'scriptListGrid';
+      container.innerHTML = '';
+      if (!container.className.includes('grid')) {
+        container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5';
+      }
+    } else {
+      const g = document.createElement('div');
+      g.id = 'scriptListGrid';
+      g.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5';
+      listView.appendChild(g);
+    }
+  }
+
+  async function bootstrapAfterLogin() {
+    try { await ApiClient.auth.me(); } catch(e){}
+    prepareScriptListContainer();
+    await loadScriptList();
+    showView(VIEW_LIST);
+  }
+
+  (async function initAuth() {
+    setupAuth();
+    // 延迟绑定大纲自审按钮 & 注入人物 AI 按钮
+    setTimeout(() => { bindOutlineReview(); injectCharGenBtn(); }, 300);
+    // 导入区文件选择
+    const impDrop = document.getElementById('impDropzone');
+    if (impDrop) {
+      let fileInput = document.getElementById('impFile');
+      if (!fileInput) {
+        fileInput = document.createElement('input');
+        fileInput.type = 'file'; fileInput.id = 'impFile';
+        fileInput.accept = '.txt,.md,.doc,.docx';
+        fileInput.className = 'hidden';
+        fileInput.onchange = () => {
+          const fn = document.getElementById('impFileName');
+          if (fn && fileInput.files[0]) fn.value = fileInput.files[0].name;
+        };
+        impDrop.appendChild(fileInput);
+      }
+      impDrop.onclick = () => fileInput.click();
+    }
+    if (ApiClient.isLoggedIn()) {
+      try {
+        await ApiClient.auth.me();
+        await bootstrapAfterLogin();
+      } catch(e) {
+        ApiClient.auth.logout();
+        showView(VIEW_AUTH);
+      }
+    } else {
+      showView(VIEW_AUTH);
+    }
+    authInitialized = true;
+  })();
 </script>
 </body>
 </html>

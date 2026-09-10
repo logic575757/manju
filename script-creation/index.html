@@ -1325,6 +1325,18 @@ input[type="checkbox"] {
         border-radius:99px; background:var(--wireframe-surface-2); color:var(--wireframe-ink-3);
         border:1px solid var(--wireframe-line);
       }
+      .eps-passed-tag {
+        display:inline-flex; align-items:center; font-size:10px; font-weight:600;
+        color:#10b981;
+      }
+      .eps-item.is-passed:not(.active)::before {
+        content: '';
+        position: absolute;
+        left: 2px; top: 10px; bottom: 10px;
+        width: 3px;
+        background: #10b981;
+        border-radius: 2px;
+      }
 
       /* ========== 顶部：分镜区字号切换按钮 ========== */
       #fontSizeSwitcher { height: 28px; }
@@ -4557,10 +4569,11 @@ input[type="checkbox"] {
     container.innerHTML = episodes.map(e => {
       const isEmpty = !e.storyboards || e.storyboards.length === 0;
       const loading = epGenerating[e.id];
+      const passedTag = e.passed ? '<span class="eps-passed-tag" style="margin-left:4px;color:#10b981">✓已通过</span>' : '';
       return `
-        <div class="eps-item ${e.id === currentEpisodeId ? 'active' : ''} ${loading ? 'is-loading' : ''}" onclick="changeEpisode(${e.id})">
+        <div class="eps-item ${e.id === currentEpisodeId ? 'active' : ''} ${loading ? 'is-loading' : ''} ${e.passed ? 'is-passed' : ''}" onclick="changeEpisode(${e.id})">
           <div class="flex items-center justify-between">
-            <span>第 ${e.id} 集 ${isEmpty ? '<span class="eps-empty-tag" style="margin-left:4px">空</span>' : ''}</span>
+            <span>第 ${e.id} 集${passedTag} ${isEmpty ? '<span class="eps-empty-tag" style="margin-left:4px">空</span>' : ''}</span>
             <span class="text-[10px]" style="color:var(--wireframe-ink-3)">${e.duration}s</span>
           </div>
           <div class="eps-item-sub">${e.title || ''}</div>
@@ -5665,9 +5678,23 @@ input[type="checkbox"] {
     if (typeof currentEpisodeId === 'undefined' || !episodes) return;
     const ep = episodes.find(e => e.id === currentEpisodeId);
     if (!ep) return;
+    recalcEpisode(ep);
+    var total = ep._totalBehDur || 0;
+    var target = ep.duration || 0;
+    var diff = total - target;
+    if (diff < 0) {
+      alert('当前集内容总时长 ' + total + 's，未达到本集设定 ' + target + 's，还差 ' + Math.abs(diff) + 's，请补充内容后再通过本集。');
+      return;
+    }
+    if (diff > 0) {
+      alert('当前集内容总时长 ' + total + 's，超出本集设定 ' + target + 's，多了 ' + diff + 's，请精简内容后再通过本集。');
+      return;
+    }
+    ep.passed = true;
     showToast('第 ' + ep.id + ' 集「' + ep.title + '」已通过', 'success');
-    const nextId = currentEpisodeId + 1;
-    if (episodes.find(e => e.id === nextId)) {
+    if (typeof renderEpisodes === 'function') renderEpisodes();
+    var nextId = currentEpisodeId + 1;
+    if (episodes.find(function (e) { return e.id === nextId; })) {
       changeEpisode(nextId);
     }
   }

@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>模块1 · 剧本创作</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style id="theme-vars">
 /* ===== Polished Minimalist Theme ===== */
 /*  墨黑 + 米白 + 青蓝点缀，细线 + 软阴影，克制而清晰 */
@@ -62,9 +65,11 @@
   --shadow-xl: 0 12px 40px -10px rgba(15,23,42,.18), 0 4px 12px -4px rgba(15,23,42,.08);
   --shadow-ring: 0 0 0 3px rgba(44,91,111,.12);
 
-  /* Typography */
-  --wireframe-font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
-  --wireframe-font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, Monaco, monospace;
+  /* Typography — 中文优先保证可读性，西文 Inter 在前 */
+  --wireframe-font-sans: "Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", "Source Han Sans SC", "WenQuanYi Micro Hei", Arial, sans-serif;
+  --wireframe-font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", "Fira Code", Consolas, "Source Han Mono SC", "Microsoft YaHei Mono", monospace;
+  --font-size-base: 15px;
+  --line-height-base: 1.7;
 
   /* Semantic aliases for head-contract */
   --brand-background: var(--wireframe-bg);
@@ -96,15 +101,18 @@
 html, body { margin:0; padding:0; }
 body {
   font-family: var(--wireframe-font-sans);
+  font-size: var(--font-size-base);
   background: var(--wireframe-bg);
   background-image:
     radial-gradient(1200px 600px at 10% -10%, rgba(44,91,111,.04), transparent 60%),
     radial-gradient(800px 400px at 110% 10%, rgba(124,58,237,.03), transparent 60%);
   color: var(--wireframe-ink);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "cv02","cv03","cv04","cv11";
-  line-height: 1.6;
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  letter-spacing: 0.01em;
+  line-height: var(--line-height-base);
 }
 
 /* Minimal scrollbar */
@@ -279,6 +287,12 @@ input[type="checkbox"] {
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
   @theme inline {
+    --font-sans: var(--wireframe-font-sans);
+    --font-mono: var(--wireframe-font-mono);
+    --text-xs: 0.8rem;
+    --text-sm: 0.9rem;
+    --text-base: 1rem;
+    --text-lg: 1.1rem;
     --color-background: var(--brand-background);
     --color-foreground: var(--brand-foreground);
     --color-card: var(--brand-card);

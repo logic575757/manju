@@ -223,9 +223,8 @@ def lock_script(
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
 ):
+    """取消定稿机制：仅作为保存一个版本的兼容接口，不再锁定剧本。"""
     script = _get_owned(script_id, current.id, db)
-    if script.locked_at:
-        raise HTTPException(400, "剧本已锁定（已定稿）")
 
     next_num = (
         db.query(func.coalesce(func.max(ScriptVersion.version_number), 0))
@@ -233,19 +232,19 @@ def lock_script(
         .scalar()
     ) + 1
 
-    final_ver = ScriptVersion(
+    ver = ScriptVersion(
         script_id=script_id,
         version_number=next_num,
-        name=payload.name or f"定稿版本 v{next_num}",
-        commit_message=payload.commit_message or "定稿版本",
+        name=payload.name or f"保存版本 v{next_num}",
+        commit_message=payload.commit_message or "保存版本",
         content=copy.deepcopy(script.content),
-        is_final=True,
+        is_final=False,
         created_by=current.id,
     )
-    db.add(final_ver)
-    script.locked_at = datetime.utcnow()
-    script.status = "final"
-    script.current_version_id = final_ver.id
+    db.add(ver)
+    db.flush()
+    script.current_version_id = ver.id
+    script.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(script)
     return script
@@ -257,9 +256,8 @@ def unlock_script(
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
 ):
+    """取消定稿机制：解锁接口保留为空操作以兼容前端调用。"""
     script = _get_owned(script_id, current.id, db)
-    if not script.locked_at:
-        raise HTTPException(400, "剧本未锁定")
     script.locked_at = None
     if script.status == "final":
         script.status = "draft"
@@ -390,8 +388,6 @@ def create_version(
     current: User = Depends(get_current_user),
 ):
     script = _get_owned(script_id, current.id, db)
-    if script.locked_at:
-        raise HTTPException(400, "剧本已定稿锁定，无法创建新版本")
     next_num = (
         db.query(func.coalesce(func.max(ScriptVersion.version_number), 0))
         .filter(ScriptVersion.script_id == script_id)
@@ -408,6 +404,7 @@ def create_version(
         created_by=current.id,
     )
     db.add(ver)
+    db.flush()
     script.content = content
     script.current_version_id = ver.id
     script.updated_at = datetime.utcnow()
@@ -464,8 +461,6 @@ def restore_version(
     current: User = Depends(get_current_user),
 ):
     script = _get_owned(script_id, current.id, db)
-    if script.locked_at:
-        raise HTTPException(400, "剧本已定稿锁定，无法回退版本")
     ver = (
         db.query(ScriptVersion)
         .filter(ScriptVersion.script_id == script_id, ScriptVersion.id == version_id)
@@ -498,8 +493,6 @@ def delete_version(
         raise HTTPException(404, "版本不存在")
     if ver.id == script.current_version_id:
         raise HTTPException(400, "当前版本不可删除")
-    if ver.is_final:
-        raise HTTPException(400, "定稿版本不可删除")
     db.delete(ver)
     db.commit()
     return {"ok": True}

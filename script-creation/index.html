@@ -1943,8 +1943,6 @@ input[type="checkbox"] {
       《重生之我是大反派》
       <span class="text-xs">▼</span>
     </button>
-    <span id="scriptLockedBadge" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-brand-amber-soft text-brand-amber">已定稿</span>
-    <button id="unlockBtn" class="hidden text-xs text-brand-amber hover:underline" onclick="unlockScript()">解锁修改</button>
     <div id="scriptDropdown" class="hidden absolute top-12 left-1/2 -translate-x-1/2 bg-card border border-border rounded-xl wf-shadow p-2 w-52">
       <div class="text-xs text-muted-foreground px-2 py-1">最近编辑</div>
       <div class="px-2 py-1.5 text-sm hover:bg-muted rounded cursor-pointer">《重生之我是大反派》</div>
@@ -2382,7 +2380,7 @@ input[type="checkbox"] {
           <span class="text-muted-foreground">→</span>
           <span class="status-pill">用户审核</span>
           <span class="text-muted-foreground">→</span>
-          <span class="status-pill">修改定稿</span>
+          <span class="status-pill">修改完善</span>
         </div>
         <div class="flex items-center gap-2">
           <span class="text-xs text-muted-foreground" id="outlineBatchInfo">已勾选 0 个模块 / 0 个问题</span>
@@ -2691,7 +2689,9 @@ input[type="checkbox"] {
               <select class="mock-select">
                 <option value="">全部状态</option>
                 <option value="draft">草稿</option>
-                <option value="finalized">已定稿</option>
+                <option value="outline">大纲中</option>
+                <option value="characters">人物中</option>
+                <option value="episodes">分集中</option>
                 <option value="archived">已归档</option>
               </select>
             </div>
@@ -2726,9 +2726,9 @@ input[type="checkbox"] {
             <div class="wf-card rounded-xl p-4 space-y-3">
               <div class="flex items-start justify-between">
                 <h3 class="font-semibold text-sm">《星际快递员》</h3>
-                <span class="text-[10px] px-2 py-0.5 border border-border rounded-full bg-muted-foreground text-primary-foreground">已定稿</span>
+                <span class="text-[10px] px-2 py-0.5 border border-border rounded-full bg-muted-foreground text-primary-foreground">分集中</span>
               </div>
-              <div class="text-xs text-muted-foreground">全部通过并定稿</div>
+              <div class="text-xs text-muted-foreground">分集剧本打磨中</div>
               <div class="text-[10px] text-muted-foreground">最近编辑：09-03 09:45</div>
               <div class="flex items-center gap-2 pt-1">
                 <button class="wf-btn-primary px-3 py-1 text-[10px] rounded" onclick="enterCreationFlow()">继续编辑</button>
@@ -2809,7 +2809,7 @@ input[type="checkbox"] {
   <div class="text-xs text-muted-foreground">当前集：<span id="bottomEpisodeName">第1集</span></div>
   <div class="flex items-center gap-2">
     <button id="epPassOneBtn" class="wf-btn-secondary px-4 py-1.5 text-xs" type="button">通过本集</button>
-    <button id="epPassAllBtn" class="wf-btn-primary px-5 py-1.5 text-xs" type="button">全部通过并定稿</button>
+    <button id="epPassAllBtn" class="wf-btn-primary px-5 py-1.5 text-xs" type="button">保存版本</button>
   </div>
 </div>
 
@@ -2851,7 +2851,7 @@ input[type="checkbox"] {
     { id: 0, title: '创作入口', desc: '选择 AI 生成或外部导入' },
     { id: 1, title: '大纲', desc: '分集结构与 AI 自审' },
     { id: 2, title: '人物小传', desc: '核心角色设定与审核' },
-    { id: 3, title: '分集剧本', desc: '逐集精修与定稿' }
+    { id: 3, title: '分集剧本', desc: '逐集精修与打磨' }
   ];
 
   const tagData = {
@@ -6761,17 +6761,16 @@ input[type="checkbox"] {
   }
 
   function statusLabel(s) {
-    const m = { draft:'草稿', outline:'大纲中', characters:'人物中', episodes:'分集中', final:'已定稿', archived:'已归档' };
+    const m = { draft:'草稿', outline:'大纲中', characters:'人物中', episodes:'分集中', archived:'已归档' };
     return m[s] || s;
   }
 
   function renderScriptCard(s) {
-    const locked = s.locked_at ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-brand-amber-soft text-brand-amber">已定稿</span>' : '';
     const del = s.deleted_at ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-state-error-soft text-state-error">已删除</span>' : '';
     return '<div class="wf-card p-4 hover:shadow-lg transition-shadow flex flex-col" data-script-id="'+s.id+'">'
       + '<div class="flex items-start justify-between mb-2">'
       +   '<h3 class="text-base font-semibold truncate">《'+escapeHtml(s.title)+'》</h3>'
-      +   '<div class="flex gap-1 flex-shrink-0 ml-2">'+locked+del+'</div>'
+      +   '<div class="flex gap-1 flex-shrink-0 ml-2">'+del+'</div>'
       + '</div>'
       + '<div class="flex gap-1.5 mb-3 text-[11px] text-muted-foreground flex-wrap">'
       +   '<span class="px-1.5 py-0.5 bg-muted rounded">'+statusLabel(s.status)+'</span>'
@@ -6851,8 +6850,6 @@ input[type="checkbox"] {
       ensureEpisodesBuilt && ensureEpisodesBuilt();
       if (typeof changeEpisode === 'function') changeEpisode(currentEpisodeId || (episodes[0] && episodes[0].id) || 1);
       renderVersionSelect && renderVersionSelect();
-      syncLockBadge();
-      if (s.locked_at) showToast('该剧本已定稿，如需修改请先解锁', 'warning');
       return s;
     } catch (err) {
       showToast('打开剧本失败：' + (err.message || err), 'error');
@@ -6925,12 +6922,9 @@ input[type="checkbox"] {
     }
   }
 
-  // ---------- 保存版本 / 定稿 ----------
+  // ---------- 保存版本 ----------
   async function saveCurrentVersionBridge(note) {
     if (!currentScriptId) return showToast('请先打开或创建剧本', 'error');
-    if (currentScriptMeta && currentScriptMeta.locked_at) {
-      return showToast('剧本已定稿，请先解锁再保存', 'error');
-    }
     const defaultName = (typeof _autoVersionName === 'function') ? _autoVersionName() : new Date().toLocaleString();
     const name = note || prompt('请输入版本名称（留空自动生成）：', '') || defaultName;
     try {
@@ -6950,40 +6944,27 @@ input[type="checkbox"] {
 
   async function lockFinalBridge() {
     if (!currentScriptId) return showToast('请先打开剧本', 'error');
-    if (!confirm('定稿后将锁定剧本，无法再编辑。确定要定稿吗？')) return;
     try {
-      await autosaveCurrent();
-      const s = await ApiClient.scripts.lock(currentScriptId);
-      currentScriptMeta = s;
-      syncLockBadge();
-      showToast('剧本已定稿', 'success');
-    } catch (err) { showToast('定稿失败：' + err.message, 'error'); }
+      await saveCurrentVersionBridge('保存版本');
+    } catch (err) { showToast('保存版本失败：' + err.message, 'error'); }
   }
   window.lockFinal = lockFinalBridge;
 
   async function refreshScriptMeta() {
     if (!currentScriptId) return;
-    try { currentScriptMeta = await ApiClient.scripts.get(currentScriptId); syncLockBadge(); } catch(e){}
+    try { currentScriptMeta = await ApiClient.scripts.get(currentScriptId); } catch(e){}
   }
 
   function syncLockBadge() {
-    const badge = document.getElementById('scriptLockedBadge');
-    const btn = document.getElementById('unlockBtn');
-    if (!badge || !btn) return;
-    const locked = !!(currentScriptMeta && currentScriptMeta.locked_at);
-    badge.classList.toggle('hidden', !locked);
-    btn.classList.toggle('hidden', !locked);
+    // 取消定稿机制：不再显示锁定徽章与解锁按钮
   }
 
   async function unlockScript() {
     if (!currentScriptId) return;
-    if (!confirm('解锁后可以继续修改该剧本。确定解锁吗？')) return;
     try {
-      const s = await ApiClient.scripts.unlock(currentScriptId);
-      currentScriptMeta = s;
-      syncLockBadge();
+      await ApiClient.scripts.unlock(currentScriptId);
       showToast('已解锁，可以继续编辑', 'success');
-    } catch (err) { showToast('解锁失败：' + err.message, 'error'); }
+    } catch (err) { /* 忽略，保持可编辑 */ }
   }
   window.unlockScript = unlockScript;
 
@@ -7020,7 +7001,7 @@ input[type="checkbox"] {
       const currentVerId = currentVersionId || null;
       sel.innerHTML = '<option value="">— 选择版本 —</option>'
         + list.map(v => '<option value="'+v.id+'"'+(String(v.id)===String(currentVerId)?' selected':'')+'>'
-          + (v.is_final?'🔒 v':'v') + (v.version_number||v.id)
+          + 'v' + (v.version_number||v.id)
           + ' · ' + escapeHtml(v.name || v.commit_message || '未命名')
           + '</option>').join('')
         + '<option value="__new__">+ 保存新版本</option>'
@@ -7124,7 +7105,6 @@ input[type="checkbox"] {
       await enterCreationFlowBridge('ai');
       if (!currentScriptId) return;
     }
-    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
     const form = (typeof collectPreset === 'function') ? collectPreset() : {};
     let theme = form.theme || '';
     try {
@@ -7172,7 +7152,6 @@ input[type="checkbox"] {
       await enterCreationFlowBridge('import');
       if (!currentScriptId) return;
     }
-    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
     const textEl = document.getElementById('impText');
     let fileInput = document.getElementById('impFile');
     const title = (document.getElementById('impFileName')||{}).value || '导入剧本';
@@ -7213,7 +7192,6 @@ input[type="checkbox"] {
   // ---------- 单模块 AI 修改 ----------
   async function runSingleAiModifyBridge(modId) {
     if (!currentScriptId) return showToast('请先打开剧本', 'error');
-    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
     const mod = outlineData.find(m => m.id === modId);
     if (!mod) return;
     const note = (outlineState.userNotes && outlineState.userNotes[modId]) || '';
@@ -7243,7 +7221,6 @@ input[type="checkbox"] {
   // ---------- 批量修改 ----------
   async function runBatchAiModifyBridge() {
     if (!currentScriptId) return showToast('请先打开剧本', 'error');
-    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
     const modIds = Array.from(outlineState.queuedModules || []);
     if (!modIds.length) return showToast('请先加入批量队列', 'error');
     const globalNote = document.getElementById('globalNote') ? document.getElementById('globalNote').value : '';
@@ -7313,7 +7290,6 @@ input[type="checkbox"] {
   // ---------- 人物生成 ----------
   async function generateCharactersBridge() {
     if (!currentScriptId) return showToast('请先打开剧本', 'error');
-    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
     showAiLoading('AI 生成人物小传', '生成中...');
     let aborted = false;
     const ctrl = ApiClient.ai.generateCharacters(currentScriptId, outlineData, {
@@ -7346,7 +7322,6 @@ input[type="checkbox"] {
   // ---------- 分集生成 ----------
   async function generateEpisodeContentBridge(id) {
     if (!currentScriptId) return showToast('请先打开剧本', 'error');
-    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
     id = id || currentEpisodeId || 1;
     const ep = episodes.find(e => String(e.id) === String(id));
     if (!ep) return showToast('未找到分集', 'error');
@@ -7375,7 +7350,6 @@ input[type="checkbox"] {
   // ---------- 分集修复 ----------
   async function runAIFixBridge() {
     if (!currentScriptId) return showToast('请先打开剧本', 'error');
-    if (currentScriptMeta && currentScriptMeta.locked_at) return showToast('剧本已定稿', 'error');
     const ep = episodes.find(e => String(e.id) === String(currentEpisodeId));
     if (!ep) return;
     const issues = (typeof episodeIssues !== 'undefined' && episodeIssues[currentEpisodeId]) || [];

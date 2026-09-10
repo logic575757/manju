@@ -243,3 +243,53 @@ class AiTaskOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ---------- Characters (nested under script.content["characters"]) ----------
+class CharacterIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    model_config = {"extra": "allow"}
+
+
+class CharacterOut(BaseModel):
+    id: str
+    model_config = {"extra": "allow"}
+
+
+class CharacterListOut(BaseModel):
+    script_id: int
+    count: int
+    characters: List[dict]
+
+
+# ---------- Episodes (nested under script.content["episodes"]) ----------
+class EpisodeIn(BaseModel):
+    title: Optional[str] = None
+    model_config = {"extra": "allow"}
+
+
+class EpisodeOut(BaseModel):
+    id: Any
+    model_config = {"extra": "allow"}
+
+
+class EpisodeListOut(BaseModel):
+    script_id: int
+    count: int
+    episodes: List[dict]
+
+
+class EpisodeValidateOut(BaseModel):
+    episode_id: Any
+    valid: bool
+    expected_duration: int
+    actual_duration: int
+    diff: int
+    issues: List[str]
+
+
+class EpisodePassOut(BaseModel):
+    episode_id: Any
+    passed: bool
+    passed_at: Optional[datetime] = None
+    validation: EpisodeValidateOut

@@ -263,11 +263,6 @@ class CharacterListOut(BaseModel):
 
 
 # ---------- Episodes (nested under script.content["episodes"]) ----------
-class EpisodeIn(BaseModel):
-    title: Optional[str] = None
-    model_config = {"extra": "allow"}
-
-
 class EpisodeOut(BaseModel):
     id: Any
     model_config = {"extra": "allow"}

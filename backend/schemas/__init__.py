@@ -288,3 +288,54 @@ class EpisodePassOut(BaseModel):
     passed: bool
     passed_at: Optional[datetime] = None
     validation: EpisodeValidateOut
+
+
+# ---------- AI Provider 模型管理 ----------
+class AiProviderIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64, description="唯一标识名，如 deepseek/gpt4o")
+    provider: str = Field(default="openai", description="协议类型，目前支持 openai（兼容协议）/mock")
+    model_name: str = Field(min_length=1, max_length=128, description="模型名，如 deepseek-chat / gpt-4o-mini")
+    base_url: str = Field(default="", max_length=255, description="OpenAI 兼容端点根，如 https://api.deepseek.com/v1")
+    api_key: str = Field(default="", max_length=512, description="API Key；mock 可留空")
+    task_bindings: List[str] = Field(default_factory=list, description="绑定的 task_key 列表；['*'] 表示全部任务兜底")
+    is_active: bool = True
+    priority: int = 100
+
+
+class AiProviderUpdate(BaseModel):
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    task_bindings: Optional[List[str]] = None
+    is_active: Optional[bool] = None
+    priority: Optional[int] = None
+
+
+class AiProviderOut(BaseModel):
+    id: int
+    name: str
+    provider: str
+    model_name: str
+    base_url: str
+    has_key: bool = False
+    key_preview: str = ""
+    task_bindings: List[str] = []
+    is_active: bool
+    priority: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AiProviderBindReq(BaseModel):
+    task_bindings: List[str] = Field(description="task_key 数组，如 ['generate_outline','generate_episode']；['*'] 为全任务兜底")
+
+
+class AiProviderTestResult(BaseModel):
+    ok: bool
+    provider: str
+    model: Optional[str] = None
+    reply: Optional[str] = None
+    usage: Optional[dict] = None
+    error: Optional[str] = None

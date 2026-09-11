@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from .auth import router as auth_router
 from .scripts import router as scripts_router
 from .ai import router as ai_router
+from .ai_providers import router as ai_providers_router
 from .tags import router as tags_router
 from .imports import router as imports_router
 from .characters import router as characters_router
@@ -13,5 +14,6 @@ api_router.include_router(scripts_router)
 api_router.include_router(characters_router)
 api_router.include_router(episodes_router)
 api_router.include_router(ai_router)
+api_router.include_router(ai_providers_router)
 api_router.include_router(tags_router)
 api_router.include_router(imports_router)

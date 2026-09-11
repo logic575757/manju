@@ -7784,13 +7784,31 @@ input[type="checkbox"] {
         await bootstrapAfterLogin();
       } catch(e) {
         ApiClient.auth.logout();
-        showView(VIEW_AUTH);
+        await demoAutoLoginOrShowAuth();
       }
     } else {
-      showView(VIEW_AUTH);
+      await demoAutoLoginOrShowAuth();
     }
     authInitialized = true;
   })();
+
+  async function demoAutoLoginOrShowAuth() {
+    const DEMO_U = 'demo';
+    const DEMO_P = 'demo1234';
+    try {
+      await ApiClient.auth.login(DEMO_U, DEMO_P);
+      await bootstrapAfterLogin();
+      return;
+    } catch (_) {
+      try {
+        await ApiClient.auth.register(DEMO_U, DEMO_P, '演示账号');
+        await bootstrapAfterLogin();
+        return;
+      } catch (_2) {
+        showView(VIEW_AUTH);
+      }
+    }
+  }
 </script>
 </body>
 </html>

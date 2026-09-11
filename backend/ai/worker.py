@@ -10,7 +10,7 @@ import httpx
 from config import settings
 from database import SessionLocal
 from models import (
-    AiTask, AiCall,
+    AiTask, AiCall, AiSkill, PromptTemplate,
     TASK_STATUS_SUCCESS,
     ERROR_CLASS_NETWORK, ERROR_CLASS_TIMEOUT, ERROR_CLASS_RATE_LIMIT,
     ERROR_CLASS_AUTH, ERROR_CLASS_BAD_REQUEST, ERROR_CLASS_PARSE,
@@ -18,21 +18,6 @@ from models import (
 )
 from ai.queue import get_queue, TaskQueue
 from ai.service import AiService
-
-
-TASK_KEY_TO_METHOD = {
-    "generate_outline": "generate_outline",
-    "review_outline": "review_outline",
-    "modify_outline_module": "modify_module",
-    "batch_modify_outline": "batch_modify",
-    "generate_characters": "generate_characters",
-    "review_characters": "review_characters",
-    "generate_episode": "generate_episode",
-    "review_episode": "review_episode",
-    "fix_episode": "fix_episode",
-    "rewrite_segment": "rewrite_segment",
-    "parse_import": "parse_import",
-}
 
 
 def classify_error(e: Exception) -> str:
@@ -64,6 +49,33 @@ def classify_error(e: Exception) -> str:
 
 def is_retryable(error_class: str) -> bool:
     return error_class in (ERROR_CLASS_NETWORK, ERROR_CLASS_TIMEOUT, ERROR_CLASS_RATE_LIMIT, ERROR_CLASS_PROVIDER)
+
+
+def _load_skill_and_prompt(db, task_key: str):
+    """从 DB 加载 AiSkill 行 + 对应的激活 PromptTemplate 行。找不到时抛出 RuntimeError。"""
+    skill = db.query(AiSkill).filter(AiSkill.key == task_key, AiSkill.is_active == True).first()
+    if not skill:
+        raise RuntimeError(f"Skill 未定义或已禁用: {task_key}")
+    prompt = db.query(PromptTemplate).filter(
+        PromptTemplate.task_key == task_key,
+        PromptTemplate.version == skill.prompt_version,
+        PromptTemplate.is_active == True,
+    ).first()
+    if not prompt:
+        raise RuntimeError(f"未找到 prompt 模板: {task_key}@{skill.prompt_version}")
+    return skill, prompt
+
+
+def _skill_meta(skill: AiSkill) -> Dict[str, Any]:
+    return {
+        "name": skill.name,
+        "temperature": skill.temperature,
+        "result_key": skill.result_key,
+        "stream_progress": skill.stream_progress,
+        "timeout": skill.timeout,
+        "max_tokens": skill.max_tokens,
+        "category": skill.category,
+    }
 
 
 class WorkerPool:
@@ -106,7 +118,6 @@ class WorkerPool:
     async def _run_task(self, task_id: int):
         db = SessionLocal()
         call_row: Optional[AiCall] = None
-        start = time.time()
         exec_start = time.time()
         error_class: Optional[str] = None
         error_msg: Optional[str] = None
@@ -122,16 +133,17 @@ class WorkerPool:
             if task.status == "cancelled":
                 return
 
-            svc = AiService(db)
-            method_name = TASK_KEY_TO_METHOD.get(task.task_key)
-            if not method_name:
-                raise RuntimeError(f"未知 task_key: {task.task_key}")
+            skill, prompt = _load_skill_and_prompt(db, task.task_key)
+            skill_meta_dict = _skill_meta(skill)
+            task_timeout = int(skill.timeout or settings.queue_task_timeout)
 
+            svc = AiService(db)
             svc._get_provider(task.task_key)
             provider_row = svc._provider_row
             task.provider_id = provider_row.id if provider_row else None
             task.provider_name = provider_row.name if provider_row else "mock"
             task.model_name = provider_row.model_name if provider_row else "mock"
+            task.skill_name = skill.name
             db.commit()
 
             call_row = AiCall(
@@ -157,19 +169,29 @@ class WorkerPool:
             last_heartbeat = time.time()
 
             provider = svc._get_provider(task.task_key)
-            method = getattr(provider, method_name)
-
             provider_error: Optional[str] = None
 
-            async with asyncio.timeout(settings.queue_task_timeout):
-                async for chunk in method(task.params or {}):
+            params = task.params or {}
+            for k in ("script_id", "version_id"):
+                params.setdefault(k, getattr(task, k, None))
+
+            run_gen = provider.run_skill(
+                task.task_key,
+                params,
+                skill_meta_dict,
+                prompt.system_prompt,
+                prompt.user_prompt_template,
+            )
+
+            async with asyncio.timeout(task_timeout):
+                async for chunk in run_gen:
                     db.expire_all()
                     task = db.query(AiTask).filter(AiTask.id == task_id).first()
                     if not task or task.status == "cancelled":
                         cancelled = True
                         raise asyncio.CancelledError()
 
-                    if chunk.startswith("event:"):
+                    if isinstance(chunk, str) and chunk.startswith("event:"):
                         lines = chunk.splitlines()
                         ev_type = ""
                         data = ""

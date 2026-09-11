@@ -407,3 +407,64 @@ class AiProviderTestResult(BaseModel):
     reply: Optional[str] = None
     usage: Optional[dict] = None
     error: Optional[str] = None
+
+
+# ---------- AI Skill / Prompt 管理 ----------
+class PromptVersionOut(BaseModel):
+    id: int
+    task_key: str
+    version: str
+    system_prompt: str
+    user_prompt_template: str
+    variables: Optional[dict] = None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AiSkillListItem(BaseModel):
+    key: str
+    name: str
+    description: Optional[str] = None
+    category: str
+    api_path: str
+    result_key: Optional[str] = None
+    prompt_version: str
+    temperature: float
+    priority: int
+    timeout: int
+    max_tokens: int = 4096
+    stream_progress: bool
+    auto_review: bool
+    script_id_field: Optional[str] = None
+    is_active: bool
+    is_builtin: bool
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AiSkillDetailOut(AiSkillListItem):
+    input_schema: Optional[dict] = None
+    output_schema: Optional[dict] = None
+    active_prompt: Optional[PromptVersionOut] = None
+    versions: List[PromptVersionOut] = Field(default_factory=list)
+    created_at: datetime
+
+
+class AiSkillUpdateReq(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    temperature: Optional[float] = None
+    priority: Optional[int] = None
+    timeout: Optional[int] = None
+    max_tokens: Optional[int] = None
+    stream_progress: Optional[bool] = None
+    auto_review: Optional[bool] = None
+    is_active: Optional[bool] = None
+    prompt_version: Optional[str] = None
+    new_system_prompt: Optional[str] = None
+    new_user_prompt_template: Optional[str] = None
+    new_version_label: Optional[str] = None

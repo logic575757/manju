@@ -5,7 +5,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database import Base, engine, SessionLocal
 import models
-from models import TagDictionary, AiProvider, PromptTemplate
+from models import TagDictionary, AiProvider, PromptTemplate, AiSkill
+from ai.skills_registry import BUILTIN_SKILLS, BUILTIN_PROMPTS
 from config import settings
 
 
@@ -143,21 +144,69 @@ PROMPT_DATA = [
 
 
 def seed_prompts(db):
-    for item in PROMPT_DATA:
+    for task_key, p in BUILTIN_PROMPTS.items():
         exists = (
             db.query(PromptTemplate)
-            .filter(PromptTemplate.task_key == item["task_key"], PromptTemplate.version == "v1")
+            .filter(PromptTemplate.task_key == task_key, PromptTemplate.version == "v1")
             .first()
         )
         if not exists:
             prompt = PromptTemplate(
-                task_key=item["task_key"],
+                task_key=task_key,
                 version="v1",
-                system_prompt=item["system_prompt"],
-                user_prompt_template=item["user_prompt_template"],
+                system_prompt=p["system_prompt"],
+                user_prompt_template=p["user_prompt_template"],
                 is_active=True,
             )
             db.add(prompt)
+        else:
+            # 内置 v1 prompt：若系统 prompt 明显比库里长（初次升级）则更新到新版本；
+            # 用户自定义 prompt 请另存新版本（如 v2），本分支不会覆盖。
+            new_sys = p["system_prompt"]
+            if exists.system_prompt != new_sys and len(exists.system_prompt) < len(new_sys) - 50:
+                exists.system_prompt = new_sys
+                exists.user_prompt_template = p["user_prompt_template"]
+    db.commit()
+
+
+def seed_skills(db):
+    for key, meta in BUILTIN_SKILLS.items():
+        exists = db.query(AiSkill).filter(AiSkill.key == key).first()
+        if exists:
+            exists.name = meta["name"]
+            exists.description = meta.get("description", "")
+            exists.category = meta.get("category", "general")
+            exists.api_path = meta["api_path"]
+            exists.result_key = meta.get("result_key")
+            exists.temperature = meta.get("temperature", 0.7)
+            exists.priority = meta.get("priority", 100)
+            exists.timeout = meta.get("timeout", 120)
+            exists.max_tokens = meta.get("max_tokens", 4096)
+            exists.stream_progress = meta.get("stream_progress", False)
+            exists.auto_review = meta.get("auto_review", False)
+            exists.script_id_field = meta.get("script_id_field")
+            exists.is_active = True
+            exists.is_builtin = True
+            continue
+        sk = AiSkill(
+            key=key,
+            name=meta["name"],
+            description=meta.get("description", ""),
+            category=meta.get("category", "general"),
+            api_path=meta["api_path"],
+            result_key=meta.get("result_key"),
+            prompt_version=meta.get("prompt_version", "v1"),
+            temperature=meta.get("temperature", 0.7),
+            priority=meta.get("priority", 100),
+            timeout=meta.get("timeout", 120),
+            max_tokens=meta.get("max_tokens", 4096),
+            stream_progress=meta.get("stream_progress", False),
+            auto_review=meta.get("auto_review", False),
+            script_id_field=meta.get("script_id_field"),
+            is_active=True,
+            is_builtin=True,
+        )
+        db.add(sk)
     db.commit()
 
 
@@ -168,6 +217,7 @@ if __name__ == "__main__":
         seed_tags(db)
         seed_ai_provider(db)
         seed_prompts(db)
+        seed_skills(db)
         print("✅ 种子数据初始化完成")
         if settings.llm_api_key and settings.llm_base_url and settings.llm_model:
             print(f"✅ 已注册默认真实 LLM provider: base_url={settings.llm_base_url} model={settings.llm_model}")

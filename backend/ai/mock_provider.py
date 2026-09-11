@@ -456,6 +456,39 @@ class MockProvider:
     name = "mock"
     model_name = "mock-v1"
 
+    _LEGACY_METHODS = {
+        "generate_outline": "generate_outline",
+        "review_outline": "review_outline",
+        "modify_outline_module": "modify_module",
+        "batch_modify_outline": "batch_modify",
+        "generate_characters": "generate_characters",
+        "review_characters": "review_characters",
+        "generate_episode": "generate_episode",
+        "review_episode": "review_episode",
+        "fix_episode": "fix_episode",
+        "rewrite_segment": "rewrite_segment",
+        "parse_import": "parse_import",
+    }
+
+    async def run_skill(
+        self,
+        task_key: str,
+        params: dict,
+        skill_meta: dict,
+        system_prompt: str,
+        user_prompt_template: str,
+    ) -> AsyncGenerator[str, None]:
+        method_name = self._LEGACY_METHODS.get(task_key)
+        if not method_name:
+            yield sse_error(f"mock provider 未支持 task_key: {task_key}")
+            return
+        method = getattr(self, method_name, None)
+        if method is None:
+            yield sse_error(f"mock provider 缺少方法: {method_name}")
+            return
+        async for chunk in method(params):
+            yield chunk
+
     async def generate_outline(self, req: dict) -> AsyncGenerator[str, None]:
         yield sse_event("phase", {"phase": "analyzing", "message": "正在分析创作参数..."})
         import asyncio
@@ -510,17 +543,22 @@ class MockProvider:
         import asyncio
         modules = req.get("modules", [])
         total = len(modules)
+        modified = []
         for i, m_item in enumerate(modules):
-            yield sse_event("progress", {"current": i + 1, "total": total, "moduleId": m_item.get("moduleId")})
-            await asyncio.sleep(0.3)
-            mod = m_item.get("module", {})
-            note = m_item.get("note", "")
+            yield sse_event("progress", {"current": i + 1, "total": total, "moduleId": m_item.get("moduleId") or m_item.get("id")})
+            await asyncio.sleep(0.2)
+            mod = m_item.get("module", {}) if isinstance(m_item, dict) else {}
+            note = m_item.get("note", "") if isinstance(m_item, dict) else ""
+            if not mod and isinstance(m_item, dict) and "id" in m_item:
+                mod = copy.deepcopy(m_item)
             if note and mod.get("content"):
                 mod["content"] += f"\n\n【批量修改】已根据「{note}」的要求优化。"
             mod["aiScore"] = min(98, mod.get("aiScore", 80) + random.randint(2, 6))
             mod["issues"] = []
-            yield sse_event("module", {"moduleId": m_item.get("moduleId"), "module": mod})
-        yield sse_done({"modified": total})
+            modified.append(mod)
+        result = {"modules": modified, "summary": f"已完成 {total} 个模块的批量修改。"}
+        yield sse_event("result", result)
+        yield sse_done({**result, "modified": total})
 
     async def review_characters(self, req: dict) -> AsyncGenerator[str, None]:
         import asyncio

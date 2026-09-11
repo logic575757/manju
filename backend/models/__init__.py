@@ -134,6 +134,31 @@ class PromptTemplate(Base):
     )
 
 
+class AiSkill(Base):
+    __tablename__ = "ai_skills"
+
+    key = Column(String(64), primary_key=True)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(32), nullable=False, default="general", index=True)
+    api_path = Column(String(128), nullable=False, unique=True)
+    result_key = Column(String(64), nullable=True)
+    prompt_version = Column(String(16), nullable=False, default="v1")
+    temperature = Column(Float, nullable=False, default=0.7)
+    priority = Column(Integer, nullable=False, default=100)
+    timeout = Column(Integer, nullable=False, default=120)
+    max_tokens = Column(Integer, nullable=False, default=4096)
+    input_schema = Column(JSON, nullable=True)
+    output_schema = Column(JSON, nullable=True)
+    stream_progress = Column(Boolean, nullable=False, default=False)
+    auto_review = Column(Boolean, nullable=False, default=False)
+    script_id_field = Column(String(64), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_builtin = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class AiCall(Base):
     __tablename__ = "ai_calls"
 

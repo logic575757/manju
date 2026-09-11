@@ -1,17 +1,18 @@
 import asyncio
 import json
 import time
-from typing import Optional, Any
+from typing import Optional, Any, Dict, Type
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db
 from models import (
-    User, Script, AiTask, AiTaskEvent,
+    User, Script, AiTask, AiTaskEvent, AiSkill,
     TASK_STATUS_QUEUED, TASK_STATUS_RUNNING, TASK_STATUS_SUCCESS,
     TASK_STATUS_FAILED, TASK_STATUS_DEAD_LETTER, TASK_STATUS_CANCELLED,
 )
@@ -22,24 +23,36 @@ from schemas import (
     AiRewriteSegmentReq, AiParseImportReq, AiTaskSubmitOut,
 )
 from ai.queue import get_queue, estimated_wait
+from ai.skills_registry import BUILTIN_SKILLS
 
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 
-TASK_DEFS = {
-    "generate_outline":         ("outline/generate",         AiGenerateOutlineReq,     "script_id", 100, "大纲生成"),
-    "review_outline":           ("outline/review",           AiReviewOutlineReq,       "script_id", 80,  "大纲审校"),
-    "modify_outline_module":    ("outline/modify-module",    AiModuleModifyReq,        "script_id", 100, "大纲模块修改"),
-    "batch_modify_outline":     ("outline/batch-modify",     AiBatchModifyReq,         "script_id", 100, "大纲批量修改"),
-    "generate_characters":      ("characters/generate",      AiGenerateCharactersReq,  "script_id", 100, "人设生成"),
-    "review_characters":        ("characters/review",        AiReviewCharactersReq,    "script_id", 80,  "人设审校"),
-    "generate_episode":         ("episode/generate",         AiGenerateEpisodeReq,     "script_id", 100, "分集生成"),
-    "review_episode":           ("episode/review",           AiReviewEpisodeReq,       "script_id", 80,  "分集审校"),
-    "fix_episode":              ("episode/fix",              AiFixEpisodeReq,          "script_id", 100, "分集修补"),
-    "rewrite_segment":          ("episode/rewrite-segment",  AiRewriteSegmentReq,      "script_id", 120, "片段重写"),
-    "parse_import":             ("import/parse",             AiParseImportReq,         None,        90,  "导入解析"),
+class GenericSkillReq(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+SCHEMA_MAP: Dict[str, Type[BaseModel]] = {
+    "generate_outline": AiGenerateOutlineReq,
+    "review_outline": AiReviewOutlineReq,
+    "modify_outline_module": AiModuleModifyReq,
+    "batch_modify_outline": AiBatchModifyReq,
+    "generate_characters": AiGenerateCharactersReq,
+    "review_characters": AiReviewCharactersReq,
+    "generate_episode": AiGenerateEpisodeReq,
+    "review_episode": AiReviewEpisodeReq,
+    "fix_episode": AiFixEpisodeReq,
+    "rewrite_segment": AiRewriteSegmentReq,
+    "parse_import": AiParseImportReq,
 }
+
+
+def _load_skill(db: Session, task_key: str) -> AiSkill:
+    skill = db.query(AiSkill).filter(AiSkill.key == task_key, AiSkill.is_active == True).first()
+    if not skill:
+        raise HTTPException(404, f"Skill 不存在或已禁用: {task_key}")
+    return skill
 
 
 def _check_script_access(script_id: Optional[int], user_id: int, db: Session) -> Optional[Script]:
@@ -70,8 +83,9 @@ def _sse_fmt(event: str, data: Any, sep: str = "\n\n") -> str:
 
 
 def _submit(task_key: str, payload, user: User, db: Session) -> AiTaskSubmitOut:
-    path, schema_cls, script_field, priority, skill_name = TASK_DEFS[task_key]
+    skill = _load_skill(db, task_key)
     params = payload.model_dump() if hasattr(payload, "model_dump") else dict(payload)
+    script_field = skill.script_id_field
     script_id = params.get(script_field) if script_field else None
     version_id = params.get("version_id")
     _check_script_access(script_id, user.id, db)
@@ -80,12 +94,12 @@ def _submit(task_key: str, payload, user: User, db: Session) -> AiTaskSubmitOut:
         task = q.submit(
             db,
             task_key=task_key,
-            skill_name=skill_name,
+            skill_name=skill.name,
             user_id=user.id,
             script_id=script_id,
             version_id=version_id,
             params=params,
-            priority=priority,
+            priority=int(skill.priority or 100),
         )
     except RuntimeError as e:
         raise HTTPException(429, str(e))
@@ -104,7 +118,7 @@ def _submit(task_key: str, payload, user: User, db: Session) -> AiTaskSubmitOut:
 
 
 def _make_endpoint(task_key: str):
-    _, schema_cls, _, _, _ = TASK_DEFS[task_key]
+    schema_cls = SCHEMA_MAP.get(task_key, GenericSkillReq)
 
     async def endpoint(
         payload: schema_cls,
@@ -117,14 +131,28 @@ def _make_endpoint(task_key: str):
     return endpoint
 
 
-for _tk, (_path, _cls, _sf, _prio, _sn) in TASK_DEFS.items():
-    router.add_api_route(
-        "/" + _path,
-        _make_endpoint(_tk),
-        methods=["POST"],
-        response_model=AiTaskSubmitOut,
-        summary=f"{_sn}（提交到队列）",
-    )
+def _register_builtin_routes():
+    for task_key, meta in BUILTIN_SKILLS.items():
+        router.add_api_route(
+            "/" + meta["api_path"],
+            _make_endpoint(task_key),
+            methods=["POST"],
+            response_model=AiTaskSubmitOut,
+            summary=f"{meta['name']}（提交到队列）",
+        )
+
+
+_register_builtin_routes()
+
+
+@router.post("/skills/submit/{task_key}", response_model=AiTaskSubmitOut, summary="通用 skill 提交接口（DB 动态添加的 skill 可走此路由）")
+async def generic_submit(
+    task_key: str,
+    payload: GenericSkillReq,
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+):
+    return _submit(task_key, payload, current, db)
 
 
 @router.get("/tasks/{task_id}/stream")

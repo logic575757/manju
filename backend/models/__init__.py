@@ -122,7 +122,7 @@ class PromptTemplate(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_key = Column(String(64), nullable=False, index=True)
-    version = Column(String(16), nullable=False)
+    version = Column(String(64), nullable=False)
     system_prompt = Column(Text, nullable=False)
     user_prompt_template = Column(Text, nullable=False)
     variables = Column(JSON, nullable=True)
@@ -143,7 +143,7 @@ class AiSkill(Base):
     category = Column(String(32), nullable=False, default="general", index=True)
     api_path = Column(String(128), nullable=False, unique=True)
     result_key = Column(String(64), nullable=True)
-    prompt_version = Column(String(16), nullable=False, default="v1")
+    prompt_version = Column(String(64), nullable=False, default="v1")
     temperature = Column(Float, nullable=False, default=0.7)
     priority = Column(Integer, nullable=False, default=100)
     timeout = Column(Integer, nullable=False, default=120)

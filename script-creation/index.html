@@ -1120,6 +1120,19 @@ input[type="checkbox"] {
         border-radius:var(--wireframe-radius-sm);
       }
       .beh-del-btn:hover { background: var(--state-error-soft); opacity:1 !important; }
+      .beh-rewrite-btn {
+        flex-shrink:0; display:block;
+        margin:1px 0 0;
+        font-size:10px; line-height:1;
+        color: var(--brand-purple);
+        background:transparent; border:none;
+        cursor:pointer; padding:3px 4px;
+        opacity:0; pointer-events:none;
+        transition: all .12s ease;
+        border-radius:var(--wireframe-radius-sm);
+      }
+      .beh-rewrite-btn:hover { background: var(--wireframe-primary-soft); opacity:1 !important; }
+      .beh-table tr:hover .beh-rewrite-btn { opacity:.6; pointer-events:auto; }
       .beh-table tr:hover .beh-del-btn { opacity:.6; pointer-events:auto; }
       .sb-del-btn {
         font-size:10px;
@@ -2528,7 +2541,10 @@ input[type="checkbox"] {
 
           <div class="grid grid-cols-2 gap-5">
             <div class="wf-card rounded-xl p-4">
-              <h4 class="text-xs font-semibold mb-3">AI 自审：人物逻辑问题</h4>
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="text-xs font-semibold">AI 自审：人物逻辑问题</h4>
+                <button type="button" class="wf-btn-ghost wf-btn-sm" onclick="reviewCharactersBridge()">AI 自审</button>
+              </div>
               <div id="charIssuesList" class="space-y-2 text-xs text-muted-foreground">
                 <div class="p-2 border border-border rounded">顾清寒第2集突然展现商业手腕，但背景中未交代相关经历。</div>
                 <div class="p-2 border border-border rounded">与苏晚晴的结盟动机略弱，建议增加一次被救助事件。</div>
@@ -2569,7 +2585,10 @@ input[type="checkbox"] {
             <div class="flex-1" style="min-height:0;display:flex;flex-direction:column;padding:8px 10px 10px;">
               <div class="flex items-center justify-between mb-1.5 flex-shrink-0">
                 <h4 class="text-xs font-semibold">AI 自审问题清单</h4>
-                <span id="aiIssuesMeta" class="text-[10px] text-muted-foreground"></span>
+                <div class="flex items-center gap-2">
+                  <button type="button" id="aiReviewEpisodeBtn" onclick="reviewEpisodeBridge()" class="wf-btn-ghost wf-btn-sm">AI 自审</button>
+                  <span id="aiIssuesMeta" class="text-[10px] text-muted-foreground"></span>
+                </div>
               </div>
               <div id="episodeIssuesList" class="space-y-1 text-xs text-muted-foreground overflow-y-auto pr-1 flex-1 min-h-0">
               </div>
@@ -2872,20 +2891,20 @@ input[type="checkbox"] {
   <div class="p-4 space-y-3 overflow-y-auto">
     <div>
       <label class="block text-xs text-muted-foreground mb-1">选中段落</label>
-      <div class="mock-textarea bg-muted" readonly style="min-height:64px;">「这笔账，我记下了。」顾清寒转身离开宴会厅。</div>
+      <div id="rewriteSegmentPreview" class="mock-textarea bg-muted" readonly style="min-height:64px;">「这笔账，我记下了。」顾清寒转身离开宴会厅。</div>
     </div>
     <div>
       <label class="block text-xs text-muted-foreground mb-1">改写指令</label>
-      <textarea class="mock-textarea" style="min-height:64px;" placeholder="例如：让情绪更愤怒，增加一句台词"></textarea>
+      <textarea id="rewriteInstruction" class="mock-textarea" style="min-height:64px;" placeholder="例如：让情绪更愤怒，增加一句台词"></textarea>
     </div>
     <div>
       <label class="block text-xs text-muted-foreground mb-1">AI 改写结果</label>
-      <div class="mock-textarea bg-muted" readonly style="min-height:80px;">「你们欠我的，今晚开始一笔一笔还清。」顾清寒攥紧拳头，头也不回地走出宴会厅。</div>
+      <div id="rewriteResultBox" class="mock-textarea bg-muted" readonly style="min-height:80px;">等待 AI 生成改写方案…</div>
     </div>
   </div>
   <div class="h-14 border-t border-border px-4 flex items-center justify-end gap-2">
     <button class="wf-btn-ghost px-4 py-1.5 text-xs" onclick="closeLocalAiRewrite()">取消</button>
-    <button class="wf-btn-primary px-4 py-1.5 text-xs" onclick="closeLocalAiRewrite(); alert('已应用改写（原型演示）')">应用改写</button>
+    <button class="wf-btn-primary px-4 py-1.5 text-xs" onclick="applyLocalAiRewrite()">应用改写</button>
   </div>
 </div>
 
@@ -5040,40 +5059,7 @@ input[type="checkbox"] {
   }
 
   function generateEpisodeContent(id) {
-    if (epGenerating[id]) return;
-    const ep = episodes.find(e => e.id === id);
-    if (!ep) return;
-    const hasContent = ep.storyboards && ep.storyboards.length > 0;
-    if (hasContent && !confirm('将覆盖第 ' + id + ' 集现有分镜内容，是否继续？')) return;
-
-    // 预计 12s，±3s 抖动模拟真实生成
-    const total = 10 + Math.floor(Math.random() * 6);
-    epGenerating[id] = { remain: total, total: total, timer: null };
-
-    // 切到本集让用户看到变化
-    if (currentEpisodeId !== id) changeEpisode(id);
-
-    renderEpisodes();
-
-    const tick = () => {
-      const st = epGenerating[id];
-      if (!st) return;
-      st.remain -= 1;
-      renderEpisodes();
-      // 如果当前正在查看本集，也要刷新中间区的倒计时
-      if (currentEpisodeId === id) renderHierarchy();
-      if (st.remain <= 0) {
-        clearInterval(st.timer);
-        delete epGenerating[id];
-        _fillEpisodeSkeleton(ep);
-        rerender();
-        if (typeof renderAIIssues === 'function') renderAIIssues();
-        showToast('第 ' + id + ' 集生成完成', 'success');
-        return;
-      }
-    };
-    epGenerating[id].timer = setInterval(tick, 1000);
-    showToast('开始生成第 ' + id + ' 集，预计 ' + total + 's', 'info');
+    if (typeof generateEpisodeContentBridge === 'function') return generateEpisodeContentBridge(id);
   }
 
   function delBehavior(si, ci, bi) {
@@ -5171,6 +5157,7 @@ input[type="checkbox"] {
               <div style="display:flex;align-items:flex-start;gap:4px;">
                 <div style="flex-shrink:0;padding-top:1px;">${tagSelect}</div>
                 <textarea class="beh-cell-input" rows="1" placeholder="台词（可空）" oninput="autoResize(this);updBehField(${ep.id},${si},${ci},${bi},'dialog',this.value)" onfocus="autoResize(this)" style="flex:1;min-width:0;">${_esc(b.dialog||'')}</textarea>
+                <button type="button" class="beh-rewrite-btn" title="AI 局部改写" onclick="openLocalAiRewriteFor(${si},${ci},${bi})">✎改写</button>
               </div>
             </td>
             <td class="col-emo">
@@ -5667,9 +5654,34 @@ input[type="checkbox"] {
     document.getElementById('scriptDropdown').classList.toggle('hidden');
   }
 
+  let rewriteCtx = null;
+
   function openLocalAiRewrite() {
     document.getElementById('localAiOverlay').classList.add('open');
     document.getElementById('localAiPanel').classList.add('open');
+  }
+
+  function openLocalAiRewriteFor(si, ci, bi) {
+    const ep = episodes.find(e => String(e.id) === String(currentEpisodeId));
+    if (!ep || !ep.storyboards || !ep.storyboards[si] || !ep.storyboards[si].cameras
+      || !ep.storyboards[si].cameras[ci] || !ep.storyboards[si].cameras[ci].behaviors
+      || !ep.storyboards[si].cameras[ci].behaviors[bi]) {
+      return showToast('未找到目标片段', 'error');
+    }
+    const behavior = ep.storyboards[si].cameras[ci].behaviors[bi];
+    rewriteCtx = { epId: ep.id, si: si, ci: ci, bi: bi, behavior: { ...behavior } };
+    const preview = document.getElementById('rewriteSegmentPreview');
+    if (preview) preview.textContent = [behavior.dialog, behavior.visual, behavior.action].filter(Boolean).join(' / ') || '（空片段）';
+    const instr = document.getElementById('rewriteInstruction');
+    if (instr) instr.value = '';
+    const box = document.getElementById('rewriteResultBox');
+    if (box) box.textContent = '等待 AI 生成改写方案…';
+    openLocalAiRewrite();
+  }
+
+  function applyLocalAiRewrite() {
+    if (typeof rewriteSegmentBridge === 'function') return rewriteSegmentBridge();
+    return showToast('片段改写接口未就绪', 'error');
   }
 
   function closeLocalAiRewrite() {
@@ -7331,7 +7343,7 @@ input[type="checkbox"] {
     return res;
   }
 
-  function _applyAiResultToState(taskKey, result) {
+  function _applyAiResultToState(taskKey, result, reg) {
     if (!result) result = {};
     switch (taskKey) {
       case 'generate_outline': {
@@ -7348,7 +7360,7 @@ input[type="checkbox"] {
       case 'review_outline': {
         const issues = (result && result.issues) ? result.issues : (Array.isArray(result) ? result : []);
         if (outlineState.checkedIssues) outlineState.checkedIssues.clear();
-        outlineData.forEach(m => { if (m.issues) delete m.issues; });
+        outlineData.forEach(m => { m.issues = []; });
         (Array.isArray(issues) ? issues : []).forEach(it => {
           const mod = outlineData.find(m => m.id === (it.moduleId || it.module_id));
           if (mod) {
@@ -7394,6 +7406,18 @@ input[type="checkbox"] {
         renderCharacters();
         break;
       }
+      case 'review_characters': {
+        const issues = Array.isArray(result.issues) ? result.issues : (Array.isArray(result) ? result : []);
+        issues.forEach(it => {
+          const c = characterData.find(x => String(x.id) === String(it.characterId || it.character_id));
+          if (c) {
+            if (!c.issues) c.issues = [];
+            c.issues.push({ type: it.type, text: it.text || it.message || JSON.stringify(it) });
+          }
+        });
+        renderCharacters();
+        break;
+      }
       case 'generate_episode': {
         const newEp = result.episode || result;
         if (newEp && typeof newEp === 'object') {
@@ -7419,6 +7443,40 @@ input[type="checkbox"] {
         if (issueSelection[epId]) issueSelection[epId].clear();
         renderEpisodes();
         if (typeof renderEpisodeIssues === 'function' && String(currentEpisodeId) === String(epId)) renderEpisodeIssues();
+        break;
+      }
+      case 'review_episode': {
+        const epId = (reg && reg.epId != null) ? reg.epId : currentEpisodeId;
+        const issues = Array.isArray(result.issues) ? result.issues : (Array.isArray(result) ? result : []);
+        if (!episodeIssues[epId]) episodeIssues[epId] = [];
+        episodeIssues[epId] = issues.map(it => ({
+          id: it.id,
+          priority: it.priority || 'T2',
+          type: it.type || 'logic',
+          target: it.target || null,
+          text: it.text || it.message || JSON.stringify(it),
+          status: it.status || 'pending'
+        }));
+        if (issueSelection[epId]) issueSelection[epId].clear();
+        if (String(currentEpisodeId) === String(epId) && typeof renderEpisodeIssues === 'function') renderEpisodeIssues();
+        break;
+      }
+      case 'rewrite_segment': {
+        const candidates = Array.isArray(result.candidates) ? result.candidates : [];
+        const pick = candidates[0];
+        if (pick && rewriteCtx) {
+          const { epId, si, ci, bi } = rewriteCtx;
+          const ep = episodes.find(e => String(e.id) === String(epId));
+          const cam = ep && ep.storyboards && ep.storyboards[si] && ep.storyboards[si].cameras && ep.storyboards[si].cameras[ci];
+          if (cam && cam.behaviors && cam.behaviors[bi]) {
+            cam.behaviors[bi] = { ...cam.behaviors[bi], ...pick };
+            recalcEpisode(ep);
+          }
+        }
+        if (typeof renderHierarchy === 'function') renderHierarchy();
+        const resultBox = document.getElementById('rewriteResultBox');
+        if (resultBox && pick) resultBox.textContent = pick.dialog || pick.visual || pick.action || JSON.stringify(pick);
+        if (typeof closeLocalAiRewrite === 'function') closeLocalAiRewrite();
         break;
       }
       case 'parse_import': {
@@ -7456,7 +7514,7 @@ input[type="checkbox"] {
       if (t.status === 'success') {
         reg.doneAt = Date.now();
         if (String(reg.scriptId) === String(currentScriptId)) {
-          _applyAiResultToState(reg.taskKey, t.result_json);
+          _applyAiResultToState(reg.taskKey, t.result_json, reg);
           await autosaveCurrent().catch(()=>{});
           showToast((reg.label || _aiDoneLabel(reg.taskKey)) + '完成', 'success');
           delete aiTaskRegistry[id];
@@ -7497,7 +7555,7 @@ input[type="checkbox"] {
       let t = null;
       try { t = await ApiClient.tasks.get(id, false); } catch (e) { continue; }
       if (t && t.status === 'success') {
-        if (_applyAiResultToState(reg.taskKey, t.result_json)) changed = true;
+        if (_applyAiResultToState(reg.taskKey, t.result_json, reg)) changed = true;
         delete aiTaskRegistry[id];
       } else if (t && (t.status === 'failed' || t.status === 'dead_letter')) {
         reg.status = t.status;
@@ -7687,6 +7745,38 @@ input[type="checkbox"] {
       () => ApiClient.ai.fixEpisode(currentScriptId, epId, ep, issues));
   }
   window.runAIFix = runAIFixBridge;
+
+  // ---------- 分集自审 ----------
+  async function reviewEpisodeBridge() {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    const epId = Number(currentEpisodeId) || currentEpisodeId;
+    const ep = episodes.find(e => String(e.id) === String(currentEpisodeId));
+    if (!ep) return showToast('未找到分集', 'error');
+    const idx = episodes.findIndex(e => String(e.id) === String(currentEpisodeId));
+    const previousEpisodes = idx > 0 ? episodes.slice(0, idx) : [];
+    const res = await submitAiTask(currentScriptId, 'review_episode', '自审第 ' + epId + ' 集',
+      () => ApiClient.ai.reviewEpisode(currentScriptId, epId, ep, outlineData.slice(), characterData.slice(), previousEpisodes));
+    if (res && res.task_id) aiTaskRegistry[String(res.task_id)].epId = epId;
+  }
+
+  // ---------- 人物自审 ----------
+  async function reviewCharactersBridge() {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    await submitAiTask(currentScriptId, 'review_characters', '人物自审',
+      () => ApiClient.ai.reviewCharacters(currentScriptId, characterData.slice(), outlineData.slice()));
+  }
+
+  // ---------- 片段改写 ----------
+  async function rewriteSegmentBridge() {
+    if (!currentScriptId) return showToast('请先打开剧本', 'error');
+    if (!rewriteCtx) return showToast('请先选择要改写的片段', 'error');
+    const instrEl = document.getElementById('rewriteInstruction');
+    const instruction = (instrEl ? instrEl.value : '').trim();
+    if (!instruction) return showToast('请输入改写指令', 'error');
+    const { epId, behavior } = rewriteCtx;
+    await submitAiTask(currentScriptId, 'rewrite_segment', '片段改写',
+      () => ApiClient.ai.rewriteSegment(currentScriptId, epId, behavior, instruction, 2));
+  }
 
   // ---------- 通过按钮 - 保存并推进步骤 ----------
   const _origConfirmPassToStep2 = (typeof confirmPassToStep2 === 'function') ? confirmPassToStep2 : null;

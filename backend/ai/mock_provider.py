@@ -642,8 +642,9 @@ class MockProvider:
                     if b.get("visual"):
                         b["visual"] += "（已根据审核意见优化节奏与情绪铺垫）"
                         break
-        yield sse_event("result", {"episode": ep_data})
-        yield sse_done({"episode": ep_data})
+        resolved_ids = [it.get("id") for it in issues if it.get("id")]
+        yield sse_event("result", {"episode": ep_data, "resolved_issue_ids": resolved_ids})
+        yield sse_done({"episode": ep_data, "resolved_issue_ids": resolved_ids})
 
     async def rewrite_segment(self, req: dict) -> AsyncGenerator[str, None]:
         import asyncio

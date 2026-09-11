@@ -5647,17 +5647,15 @@ input[type="checkbox"] {
   }
 
   function generateOutline() {
-    alert('AI 正在生成大纲…（原型演示，点击确定进入大纲步骤）');
-    setStep(1);
+    if (typeof generateOutlineBridge === 'function') return generateOutlineBridge();
   }
 
   function parseImport() {
-    alert('正在解析外部文本并改编…（原型演示，点击确定进入大纲步骤）');
-    setStep(1);
+    if (typeof parseImportBridge === 'function') return parseImportBridge();
   }
 
   function savePreset() {
-    alert('参数预设已保存（原型演示）');
+    showToast('参数预设已保存', 'success');
   }
 
   function onVersionChange(val) {
@@ -6429,17 +6427,11 @@ input[type="checkbox"] {
   }
 
   function generateOutline() {
-    // 从创作入口读取参数并构建分集演示数据
-    const { epDur, shotSec, totalEp, pregen } = getCfgValues();
-    buildDemoEpisodes(epDur, shotSec, totalEp, pregen);
-    showToast(`AI 已预生成前 ${pregen} 集内容，目录共 ${totalEp} 集（分镜 ${shotSec}s/镜、单集 ${epDur}s）`, 'success');
-    setTimeout(() => { setStep(1); renderOutline(); renderEpisodes(); }, 300);
+    if (typeof generateOutlineBridge === 'function') return generateOutlineBridge();
   }
 
   function parseImport() {
-    ensureEpisodesBuilt();
-    showToast('已解析导入文本并同步生成分集骨架', 'success');
-    setTimeout(() => { setStep(1); renderOutline(); renderEpisodes(); }, 300);
+    if (typeof parseImportBridge === 'function') return parseImportBridge();
   }
 
   // ========== 通过按钮校验 ==========

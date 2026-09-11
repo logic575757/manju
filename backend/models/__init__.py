@@ -162,8 +162,8 @@ class AiSkill(Base):
 class AiCall(Base):
     __tablename__ = "ai_calls"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    queue_task_id = Column(BigInteger, ForeignKey("ai_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    queue_task_id = Column(Integer, ForeignKey("ai_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=True)
     script_id = Column(Integer, ForeignKey("scripts.id"), index=True, nullable=True)
     version_id = Column(Integer, ForeignKey("script_versions.id"), nullable=True)
@@ -209,7 +209,7 @@ ERROR_CLASS_UNKNOWN = "unknown"
 class AiTask(Base):
     __tablename__ = "ai_tasks"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     task_key = Column(String(64), nullable=False, index=True)
     skill_name = Column(String(64), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
@@ -261,8 +261,8 @@ class AiTask(Base):
 class AiTaskEvent(Base):
     __tablename__ = "ai_task_events"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    task_id = Column(BigInteger, ForeignKey("ai_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(Integer, ForeignKey("ai_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
     seq = Column(Integer, nullable=False)
     event_type = Column(String(16), nullable=False, index=True)
     phase = Column(String(64), nullable=True)

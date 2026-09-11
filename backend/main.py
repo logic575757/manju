@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,11 +7,23 @@ from database import Base, engine
 from api import api_router
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    from ai.worker import start_workers, stop_workers
+    await start_workers()
+    try:
+        yield
+    finally:
+        await stop_workers()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="剧本创作 API",
-        description="Script Creation Backend — FastAPI + MySQL",
-        version="1.0.0",
+        description="Script Creation Backend — FastAPI + MySQL + AI Queue",
+        version="1.1.0",
+        lifespan=lifespan,
     )
 
     app.add_middleware(
@@ -26,7 +40,12 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "service": "script-creation-api"}
+        from config import settings
+        return {
+            "status": "ok",
+            "service": "script-creation-api",
+            "queue_concurrency": settings.queue_max_concurrency,
+        }
 
     return app
 
@@ -41,5 +60,5 @@ if __name__ == "__main__":
         "main:app",
         host=settings.api_host,
         port=settings.api_port,
-        reload=True,
+        reload=False,
     )

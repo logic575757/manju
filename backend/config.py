@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_timeout: int = 120
 
+    queue_max_concurrency: int = 3
+    queue_poll_interval: float = 0.5
+    queue_max_retries: int = 2
+    queue_task_timeout: int = 300
+    queue_heartbeat_interval: int = 15
+    queue_stale_timeout: int = 60
+    queue_user_max_pending: int = 10
+
     @property
     def database_url(self) -> str:
         return (

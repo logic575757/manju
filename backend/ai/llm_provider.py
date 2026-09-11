@@ -159,7 +159,13 @@ class LLMProvider:
                 return
             if post_process:
                 parsed = post_process(parsed)
-            result = {result_key: parsed} if isinstance(result_key, str) else parsed
+            if isinstance(result_key, str):
+                if isinstance(parsed, dict) and result_key in parsed and len(parsed) <= 3:
+                    result = parsed
+                else:
+                    result = {result_key: parsed}
+            else:
+                result = parsed
             elapsed = int((time.time() - t0) * 1000)
             yield sse_event("result", result)
             yield sse_done({**result, "usage": usage, "elapsed_ms": elapsed})

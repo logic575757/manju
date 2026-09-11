@@ -138,19 +138,47 @@ class AiCall(Base):
     __tablename__ = "ai_calls"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    queue_task_id = Column(BigInteger, ForeignKey("ai_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=True)
     script_id = Column(Integer, ForeignKey("scripts.id"), index=True, nullable=True)
     version_id = Column(Integer, ForeignKey("script_versions.id"), nullable=True)
     task_key = Column(String(64), nullable=False, index=True)
     provider_id = Column(Integer, ForeignKey("ai_providers.id"), nullable=True)
+    provider_name = Column(String(64), nullable=True)
     model_name = Column(String(128), nullable=False, default="mock")
     input_tokens = Column(Integer, default=0, nullable=False)
     output_tokens = Column(Integer, default=0, nullable=False)
     latency_ms = Column(Integer, default=0, nullable=False)
-    status = Column(String(16), nullable=False, default="success")
+    queue_wait_ms = Column(Integer, default=0, nullable=False)
+    attempt = Column(Integer, default=1, nullable=False)
+    status = Column(String(16), nullable=False, default="success", index=True)
+    error_class = Column(String(32), nullable=True, index=True)
     error_msg = Column(Text, nullable=True)
     request_body = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+TASK_STATUS_PENDING = "pending"
+TASK_STATUS_QUEUED = "queued"
+TASK_STATUS_RUNNING = "running"
+TASK_STATUS_SUCCESS = "success"
+TASK_STATUS_FAILED = "failed"
+TASK_STATUS_CANCELLED = "cancelled"
+TASK_STATUS_DEAD_LETTER = "dead_letter"
+
+TASK_PRIORITY_HIGH = 200
+TASK_PRIORITY_NORMAL = 100
+TASK_PRIORITY_LOW = 50
+
+ERROR_CLASS_NETWORK = "network"
+ERROR_CLASS_TIMEOUT = "timeout"
+ERROR_CLASS_RATE_LIMIT = "rate_limit"
+ERROR_CLASS_AUTH = "auth"
+ERROR_CLASS_BAD_REQUEST = "bad_request"
+ERROR_CLASS_PARSE = "parse"
+ERROR_CLASS_PROVIDER = "provider_error"
+ERROR_CLASS_CANCELLED = "cancelled"
+ERROR_CLASS_UNKNOWN = "unknown"
 
 
 class AiTask(Base):
@@ -158,13 +186,68 @@ class AiTask(Base):
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     task_key = Column(String(64), nullable=False, index=True)
-    script_id = Column(Integer, ForeignKey("scripts.id"), nullable=True)
+    skill_name = Column(String(64), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    status = Column(String(16), nullable=False, default="pending", index=True)
+    script_id = Column(Integer, ForeignKey("scripts.id"), nullable=True, index=True)
+    version_id = Column(Integer, ForeignKey("script_versions.id"), nullable=True)
+    provider_name = Column(String(64), nullable=True)
+    provider_id = Column(Integer, ForeignKey("ai_providers.id"), nullable=True)
+    model_name = Column(String(128), nullable=True)
+
+    status = Column(String(16), nullable=False, default=TASK_STATUS_QUEUED, index=True)
+    priority = Column(Integer, default=TASK_PRIORITY_NORMAL, nullable=False, index=True)
     progress = Column(Integer, default=0, nullable=False)
+    phase = Column(String(64), nullable=True)
+
     params = Column(JSON, nullable=True)
-    result_ref = Column(String(255), nullable=True)
+    result_json = Column(JSON, nullable=True)
+    result_text = Column(Text(length=4294967295), nullable=True)
+    error_class = Column(String(32), nullable=True, index=True)
     error_msg = Column(Text, nullable=True)
+
+    attempts = Column(Integer, default=0, nullable=False)
+    max_retries = Column(Integer, default=2, nullable=False)
+    worker_id = Column(String(64), nullable=True, index=True)
+    heartbeat_at = Column(DateTime, nullable=True)
+
+    queue_wait_ms = Column(Integer, default=0, nullable=False)
+    exec_ms = Column(Integer, default=0, nullable=False)
+    total_ms = Column(Integer, default=0, nullable=False)
+    input_tokens = Column(Integer, default=0, nullable=False)
+    output_tokens = Column(Integer, default=0, nullable=False)
+
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    cancelled_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False, index=True)
+
+    events = relationship(
+        "AiTaskEvent", back_populates="task",
+        cascade="all, delete-orphan", order_by="AiTaskEvent.seq.asc()",
+    )
+
+    __table_args__ = (
+        Index("ix_task_status_pickup", "status", "priority", "created_at"),
+        Index("ix_task_user_status", "user_id", "status", "created_at"),
+    )
+
+
+class AiTaskEvent(Base):
+    __tablename__ = "ai_task_events"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    task_id = Column(BigInteger, ForeignKey("ai_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    seq = Column(Integer, nullable=False)
+    event_type = Column(String(16), nullable=False, index=True)
+    phase = Column(String(64), nullable=True)
+    progress = Column(Integer, nullable=True)
+    data = Column(Text, nullable=True)
+    meta = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    task = relationship("AiTask", back_populates="events")
+
+    __table_args__ = (
+        Index("ix_event_task_seq", "task_id", "seq", unique=True),
+    )

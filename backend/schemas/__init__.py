@@ -234,15 +234,79 @@ class AiParseImportReq(BaseModel):
     tone: str = "保持原作风味"
 
 
-class AiTaskOut(BaseModel):
-    id: int
-    task_key: str
+class AiTaskSubmitOut(BaseModel):
+    task_id: int
     status: str
-    progress: int
-    error_msg: Optional[str] = None
+    position: int = 0
+    estimated_wait_sec: int = 0
+    stream_url: str
+
+
+class AiTaskEventOut(BaseModel):
+    id: int
+    seq: int
+    event_type: str
+    phase: Optional[str] = None
+    progress: Optional[int] = None
+    data: Optional[str] = None
+    meta: Optional[dict] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AiTaskOut(BaseModel):
+    id: int
+    task_key: str
+    skill_name: Optional[str] = None
+    user_id: int
+    script_id: Optional[int] = None
+    provider_name: Optional[str] = None
+    model_name: Optional[str] = None
+    status: str
+    priority: int
+    progress: int
+    phase: Optional[str] = None
+    error_class: Optional[str] = None
+    error_msg: Optional[str] = None
+    attempts: int
+    max_retries: int
+    queue_wait_ms: int = 0
+    exec_ms: int = 0
+    total_ms: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    result_json: Optional[Any] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    estimated_wait_sec: int = 0
+    worker_id: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class AiTaskDetailOut(AiTaskOut):
+    result_text: Optional[str] = None
+    events: List[AiTaskEventOut] = Field(default_factory=list)
+
+
+class AiTaskStatsOut(BaseModel):
+    total: int = 0
+    queued: int = 0
+    running: int = 0
+    success: int = 0
+    failed: int = 0
+    dead_letter: int = 0
+    cancelled: int = 0
+    concurrency: int = 0
+    by_task_key: dict = Field(default_factory=dict)
+    by_provider: dict = Field(default_factory=dict)
+    by_error_class: dict = Field(default_factory=dict)
+    avg_latency_ms: float = 0
+    avg_queue_wait_ms: float = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
 
 
 # ---------- Characters (nested under script.content["characters"]) ----------

@@ -5743,7 +5743,7 @@ input[type="checkbox"] {
   function _collectSnapshot() {
     return {
       episodes: JSON.parse(JSON.stringify(episodes || [])),
-      outlineData: typeof outlineData !== 'undefined' ? JSON.parse(JSON.stringify(outlineData)) : null,
+      outline: typeof outlineData !== 'undefined' ? JSON.parse(JSON.stringify(outlineData)) : null,
       characters: typeof characterData !== 'undefined' ? JSON.parse(JSON.stringify(characterData)) : null,
     };
   }
@@ -5829,7 +5829,7 @@ input[type="checkbox"] {
       note,
       createdAt: Date.now(),
       episodes: snap.episodes,
-      outlineData: snap.outlineData,
+      outline: snap.outline,
       characters: snap.characters,
       summary: _snapshotSummary(snap),
     };
@@ -5855,9 +5855,9 @@ input[type="checkbox"] {
     }
     // 恢复快照到全局状态
     episodes = JSON.parse(JSON.stringify(ver.episodes || []));
-    if (ver.outlineData && typeof outlineData !== 'undefined') {
+    if (ver.outline && typeof outlineData !== 'undefined') {
       outlineData.length = 0;
-      JSON.parse(JSON.stringify(ver.outlineData || [])).forEach(m => outlineData.push(m));
+      JSON.parse(JSON.stringify(ver.outline || [])).forEach(m => outlineData.push(m));
     }
     if (ver.characters && typeof characterData !== 'undefined') {
       characterData.length = 0;
@@ -5888,9 +5888,9 @@ input[type="checkbox"] {
     const target = (currentVersionId && scriptVersions.find(v => v.id === currentVersionId)) || sorted[0];
     if (!target) return;
     episodes = JSON.parse(JSON.stringify(target.episodes || []));
-    if (target.outlineData && typeof outlineData !== 'undefined') {
+    if (target.outline && typeof outlineData !== 'undefined') {
       outlineData.length = 0;
-      JSON.parse(JSON.stringify(target.outlineData || [])).forEach(m => outlineData.push(m));
+      JSON.parse(JSON.stringify(target.outline || [])).forEach(m => outlineData.push(m));
     }
     if (target.characters && typeof characterData !== 'undefined') {
       characterData.length = 0;
@@ -6936,7 +6936,7 @@ input[type="checkbox"] {
     try {
       const snapshot = (typeof _collectSnapshot === 'function')
         ? _collectSnapshot()
-        : { episodes, outlineData, characters: characterData };
+        : { episodes, outline: outlineData, characters: characterData };
       const step = currentStep || 0;
       const progress = Math.round(step / 3 * 100);
       await ApiClient.scripts.update(currentScriptId, {
@@ -6955,7 +6955,7 @@ input[type="checkbox"] {
     const defaultName = (typeof _autoVersionName === 'function') ? _autoVersionName() : new Date().toLocaleString();
     const name = note || prompt('请输入版本名称（留空自动生成）：', '') || defaultName;
     try {
-      const snapshot = (typeof _collectSnapshot === 'function') ? _collectSnapshot() : { episodes, outlineData, characters: characterData };
+      const snapshot = (typeof _collectSnapshot === 'function') ? _collectSnapshot() : { episodes, outline: outlineData, characters: characterData };
       await ApiClient.scripts.update(currentScriptId, { content: snapshot });
       const ver = await ApiClient.scripts.createVersion(currentScriptId, name);
       scriptDirty = false;
@@ -7124,6 +7124,228 @@ input[type="checkbox"] {
   function aiProgress(pct) {
     const bar = document.getElementById('aiProgress');
     if (bar && bar.firstChild) bar.firstChild.style.width = Math.max(5, Math.min(99, pct)) + '%';
+  }
+
+  // ---------- AI 任务队列（非阻塞提交 + 后台轮询 + 结果回填） ----------
+  const AI_TASKS_KEY = 'script_ai_tasks_v1';
+  let aiTaskRegistry = (() => {
+    try { return JSON.parse(localStorage.getItem(AI_TASKS_KEY) || '{}'); }
+    catch (e) { return {}; }
+  })();
+  function _saveAiTaskRegistry() {
+    try { localStorage.setItem(AI_TASKS_KEY, JSON.stringify(aiTaskRegistry)); } catch (e) {}
+  }
+
+  let _aiPollTimer = null;
+  function _ensureAiPoller() {
+    if (_aiPollTimer) return;
+    _aiPollTimer = setInterval(_pollAiTasks, 4000);
+    _pollAiTasks();
+  }
+  function _stopAiPoller() {
+    if (_aiPollTimer) { clearInterval(_aiPollTimer); _aiPollTimer = null; }
+  }
+
+  function _aiDoneLabel(taskKey) {
+    const labels = {
+      generate_outline: '大纲生成',
+      review_outline: '大纲自审',
+      modify_outline_module: '单模块修改',
+      batch_modify_outline: '批量修改',
+      generate_characters: '人物生成',
+      review_characters: '人物自审',
+      generate_episode: '分集生成',
+      review_episode: '分集自审',
+      fix_episode: '分集修复',
+      rewrite_segment: '片段改写',
+      parse_import: '导入解析',
+    };
+    return labels[taskKey] || 'AI 任务';
+  }
+
+  function _queueToast(res, label) {
+    let msg = label + '已添加到队列';
+    if (typeof res.position === 'number' && res.position > 0) msg += '，当前第 ' + res.position + ' 位';
+    const wait = res.estimated_wait_sec || 0;
+    if (wait > 0) {
+      msg += '，预计 ' + (wait >= 60 ? '约 ' + Math.max(1, Math.round(wait / 60)) + ' 分钟' : wait + ' 秒') + ' 完成';
+    }
+    msg += '。可继续创作或切换其它剧本，完成后回到该剧本即可看到结果。';
+    showToast(msg, 'info');
+  }
+
+  async function submitAiTask(scriptId, taskKey, label, submitFn) {
+    let res;
+    try { res = await submitFn(); }
+    catch (err) { showToast(label + '提交失败：' + (err.message || err), 'error'); return null; }
+    if (!res || !res.task_id) { showToast(label + '提交失败：未返回任务编号', 'error'); return null; }
+    aiTaskRegistry[String(res.task_id)] = {
+      scriptId: scriptId,
+      taskKey: taskKey,
+      status: 'queued',
+      submittedAt: Date.now(),
+    };
+    _saveAiTaskRegistry();
+    _queueToast(res, label);
+    _ensureAiPoller();
+    return res;
+  }
+
+  function _applyAiResultToState(taskKey, result) {
+    if (!result) result = {};
+    switch (taskKey) {
+      case 'generate_outline': {
+        const mods = Array.isArray(result.outline) ? result.outline : (Array.isArray(result) ? result : []);
+        if (mods.length) {
+          outlineData.length = 0;
+          mods.forEach(m => outlineData.push(m));
+        }
+        setStep(1);
+        renderOutline();
+        if (typeof renderOutlineToc === 'function') renderOutlineToc();
+        break;
+      }
+      case 'review_outline': {
+        const issues = (result && result.issues) ? result.issues : (Array.isArray(result) ? result : []);
+        if (outlineState.checkedIssues) outlineState.checkedIssues.clear();
+        outlineData.forEach(m => { if (m.issues) delete m.issues; });
+        (Array.isArray(issues) ? issues : []).forEach(it => {
+          const mod = outlineData.find(m => m.id === (it.moduleId || it.module_id));
+          if (mod) {
+            if (!mod.issues) mod.issues = [];
+            mod.issues.push({ severity: it.severity || 'warn', type: it.type || 'logic', message: it.message || it.text || JSON.stringify(it), category: it.category });
+          }
+        });
+        renderOutline();
+        if (typeof renderOutlineToc === 'function') renderOutlineToc();
+        break;
+      }
+      case 'modify_outline_module': {
+        const newMod = result.module || result;
+        if (newMod && typeof newMod === 'object') {
+          const mid = newMod.id;
+          const idx = outlineData.findIndex(m => m.id === mid);
+          if (idx >= 0) outlineData[idx] = { ...outlineData[idx], ...newMod, id: mid };
+        }
+        renderOutline();
+        if (typeof renderOutlineToc === 'function') renderOutlineToc();
+        break;
+      }
+      case 'batch_modify_outline': {
+        const mods = Array.isArray(result.modules) ? result.modules : (Array.isArray(result) ? result : []);
+        mods.forEach(newMod => {
+          if (newMod && typeof newMod === 'object' && newMod.id) {
+            const idx = outlineData.findIndex(m => m.id === newMod.id);
+            if (idx >= 0) outlineData[idx] = { ...outlineData[idx], ...newMod, id: newMod.id };
+          }
+        });
+        if (outlineState.queuedModules) outlineState.queuedModules.clear();
+        renderOutline();
+        if (typeof renderModifyQueue === 'function') renderModifyQueue();
+        if (typeof renderOutlineToc === 'function') renderOutlineToc();
+        break;
+      }
+      case 'generate_characters': {
+        const list = result.characters || result;
+        if (Array.isArray(list)) {
+          characterData.length = 0;
+          list.forEach(c => characterData.push(c));
+        }
+        renderCharacters();
+        break;
+      }
+      case 'generate_episode': {
+        const newEp = result.episode || result;
+        if (newEp && typeof newEp === 'object') {
+          const id = newEp.id;
+          const idx = episodes.findIndex(e => String(e.id) === String(id));
+          if (idx >= 0) episodes[idx] = { ...episodes[idx], ...newEp, id: episodes[idx].id };
+          else episodes.push({ ...newEp, id: id });
+        }
+        renderEpisodes();
+        break;
+      }
+      case 'fix_episode': {
+        const newEp = result.episode || result;
+        const epId = (newEp && newEp.id != null) ? newEp.id : currentEpisodeId;
+        const resolvedIds = Array.isArray(result.resolved_issue_ids) ? result.resolved_issue_ids : [];
+        if (newEp && typeof newEp === 'object') {
+          const idx = episodes.findIndex(e => String(e.id) === String(epId));
+          if (idx >= 0) episodes[idx] = { ...episodes[idx], ...newEp, id: episodes[idx].id };
+          else episodes.push({ ...newEp, id: epId });
+        }
+        const list = (typeof episodeIssues !== 'undefined' && episodeIssues[epId]) || [];
+        list.forEach(it => { if (resolvedIds.indexOf(it.id) >= 0) it.status = 'resolved'; });
+        if (issueSelection[epId]) issueSelection[epId].clear();
+        renderEpisodes();
+        if (typeof renderEpisodeIssues === 'function' && String(currentEpisodeId) === String(epId)) renderEpisodeIssues();
+        break;
+      }
+      case 'parse_import': {
+        let parsed = result;
+        if (parsed && parsed.result && typeof parsed.result === 'object' && !parsed.outline && !parsed.characters && !parsed.episodes) parsed = parsed.result;
+        if (parsed && Array.isArray(parsed.outline)) { outlineData.length = 0; parsed.outline.forEach(m => outlineData.push(m)); }
+        if (parsed && Array.isArray(parsed.characters)) { characterData.length = 0; parsed.characters.forEach(c => characterData.push(c)); }
+        if (parsed && Array.isArray(parsed.episodes)) { episodes.length = 0; parsed.episodes.forEach(e => episodes.push(e)); }
+        setStep(1);
+        renderOutline(); renderCharacters(); renderEpisodes();
+        break;
+      }
+      default:
+        return false;
+    }
+    return true;
+  }
+
+  async function _pollAiTasks() {
+    const ids = Object.keys(aiTaskRegistry);
+    if (!ids.length) { _stopAiPoller(); return; }
+    for (const id of ids) {
+      const reg = aiTaskRegistry[id];
+      if (!reg || reg.status !== 'queued') continue;
+      let t = null;
+      try { t = await ApiClient.tasks.get(id, false); } catch (e) { continue; }
+      if (!t) continue;
+      if (t.status === 'success') {
+        if (reg.scriptId === currentScriptId) {
+          _applyAiResultToState(reg.taskKey, t.result_json);
+          await autosaveCurrent().catch(()=>{});
+          showToast(_aiDoneLabel(reg.taskKey) + '完成', 'success');
+          delete aiTaskRegistry[id];
+        } else {
+          reg.status = 'done';
+          showToast('剧本 #' + reg.scriptId + ' 的「' + _aiDoneLabel(reg.taskKey) + '」已完成，打开该剧本即可查看结果', 'success');
+        }
+      } else if (t.status === 'failed' || t.status === 'dead_letter' || t.status === 'cancelled') {
+        showToast(_aiDoneLabel(reg.taskKey) + '失败：' + (t.error_msg || t.error_class || '未知错误'), 'error');
+        delete aiTaskRegistry[id];
+      }
+    }
+    _saveAiTaskRegistry();
+    if (!Object.values(aiTaskRegistry).some(r => r && r.status === 'queued')) _stopAiPoller();
+  }
+
+  async function _applyPendingAiResults(scriptId) {
+    const ids = Object.keys(aiTaskRegistry).filter(id => {
+      const r = aiTaskRegistry[id];
+      return r && r.scriptId === scriptId && r.status === 'done';
+    });
+    if (!ids.length) return;
+    let changed = false;
+    for (const id of ids) {
+      const reg = aiTaskRegistry[id];
+      let t = null;
+      try { t = await ApiClient.tasks.get(id, false); } catch (e) { continue; }
+      if (t && t.status === 'success') {
+        if (_applyAiResultToState(reg.taskKey, t.result_json)) changed = true;
+        delete aiTaskRegistry[id];
+      } else if (t && (t.status === 'failed' || t.status === 'dead_letter' || t.status === 'cancelled')) {
+        showToast(_aiDoneLabel(reg.taskKey) + '失败：' + (t.error_msg || t.error_class || '未知错误'), 'error');
+        delete aiTaskRegistry[id];
+      }
+    }
+    _saveAiTaskRegistry();
+    if (changed) { await autosaveCurrent().catch(()=>{}); }
   }
 
   // ---------- 大纲生成 ----------

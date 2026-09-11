@@ -2,14 +2,11 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db
 from models import User, Script, ScriptImport
-from ai.service import AiService
-from ai.sse import sse_event, sse_done, sse_error
 
 router = APIRouter(prefix="/api/imports", tags=["imports"])
 
@@ -63,31 +60,12 @@ async def create_import(
     db.commit()
     db.refresh(imp)
 
-    async def parse_stream():
-        import asyncio
-        svc = AiService(db)
-        yield sse_event("import_start", {"import_id": imp.id, "script_id": script_id, "file_name": file.filename})
-        await asyncio.sleep(0.2)
-        yield sse_event("phase", {"phase": "reading", "message": f"已读取文件 {file.filename}，共{len(raw_bytes)}字节"})
-        await asyncio.sleep(0.3)
-        async for chunk in svc.stream(
-            task_key="parse_import",
-            method_name="parse_import",
-            params={"text": raw_text[:8000], "file_name": file.filename, "episodes": 20, "ep_duration": 90},
-            user_id=current.id,
-            script_id=script_id,
-        ):
-            yield chunk
-
-    return StreamingResponse(
-        parse_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    return {
+        "id": imp.id,
+        "script_id": script_id,
+        "file_name": file.filename,
+        "raw_text": raw_text[:8000],
+    }
 
 
 @router.get("")

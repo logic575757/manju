@@ -161,7 +161,7 @@ BUILTIN_SKILLS: Dict[str, Dict[str, Any]] = {
         "priority": 90,
         "timeout": 300,
         "max_tokens": 16384,
-        "script_id_field": None,
+        "script_id_field": "script_id",
     },
 }
 

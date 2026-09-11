@@ -232,6 +232,7 @@ class AiParseImportReq(BaseModel):
     episodes: int = 20
     ep_duration: int = 90
     tone: str = "保持原作风味"
+    script_id: Optional[int] = None
 
 
 class AiTaskSubmitOut(BaseModel):

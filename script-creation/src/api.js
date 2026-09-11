@@ -214,51 +214,80 @@ const ApiClient = (() => {
     diff(id, v1, v2) { return request(`/api/scripts/${id}/versions/diff`, { query: { v1, v2 } }); },
   };
 
-  /* ============== AI (SSE streaming) ============== */
+  /* ============== AI (队列提交，返回任务回执) ============== */
   const ai = {
-    generateOutline(scriptId, params, handlers) {
-      return streamSSE('/api/ai/outline/generate', { script_id: scriptId, ...params }, handlers);
+    generateOutline(scriptId, params) {
+      return request('/api/ai/outline/generate', { method: 'POST', body: { script_id: scriptId, ...params } });
     },
-    reviewOutline(scriptId, outline, handlers) {
-      return streamSSE('/api/ai/outline/review', { script_id: scriptId, outline }, handlers);
+    reviewOutline(scriptId, outline) {
+      return request('/api/ai/outline/review', { method: 'POST', body: { script_id: scriptId, outline } });
     },
-    modifyModule(scriptId, moduleId, instruction, currentContent, handlers) {
-      return streamSSE('/api/ai/outline/modify-module', {
-        script_id: scriptId, module_id: moduleId, instruction, current_content: currentContent,
-      }, handlers);
+    modifyModule(scriptId, moduleId, module, note, issues) {
+      return request('/api/ai/outline/modify-module', {
+        method: 'POST',
+        body: { script_id: scriptId, module_id: moduleId, module, note: note || '', issues },
+      });
     },
-    batchModify(scriptId, modules, globalNote, handlers) {
-      return streamSSE('/api/ai/outline/batch-modify', {
-        script_id: scriptId, modules, global_note: globalNote,
-      }, handlers);
+    batchModify(scriptId, modules, globalNote) {
+      return request('/api/ai/outline/batch-modify', {
+        method: 'POST',
+        body: { script_id: scriptId, modules, global_note: globalNote || '' },
+      });
     },
-    generateCharacters(scriptId, outline, handlers) {
-      return streamSSE('/api/ai/characters/generate', { script_id: scriptId, outline }, handlers);
+    generateCharacters(scriptId, outline, existingCharacters) {
+      return request('/api/ai/characters/generate', {
+        method: 'POST',
+        body: { script_id: scriptId, outline, existing_characters: existingCharacters || [] },
+      });
     },
-    reviewCharacters(scriptId, characters, outline, handlers) {
-      return streamSSE('/api/ai/characters/review', { script_id: scriptId, characters, outline }, handlers);
+    reviewCharacters(scriptId, characters, outline) {
+      return request('/api/ai/characters/review', {
+        method: 'POST',
+        body: { script_id: scriptId, characters, outline: outline || null },
+      });
     },
-    generateEpisode(scriptId, epNum, episodes, outline, characters, handlers) {
-      return streamSSE('/api/ai/episode/generate', {
-        script_id: scriptId, ep_num: epNum, episodes, outline, characters,
-      }, handlers);
+    generateEpisode(scriptId, episodeIndex, outline, characters, previousEpisodes) {
+      return request('/api/ai/episode/generate', {
+        method: 'POST',
+        body: { script_id: scriptId, episode_index: episodeIndex, outline, characters, previous_episodes: previousEpisodes || [] },
+      });
     },
-    reviewEpisode(scriptId, episode, outline, characters, handlers) {
-      return streamSSE('/api/ai/episode/review', { script_id: scriptId, episode, outline, characters }, handlers);
+    reviewEpisode(scriptId, episodeIndex, episode, outline, characters, previousEpisodes) {
+      return request('/api/ai/episode/review', {
+        method: 'POST',
+        body: { script_id: scriptId, episode_index: episodeIndex, episode, outline: outline || null, characters: characters || null, previous_episodes: previousEpisodes || [] },
+      });
     },
-    fixEpisode(scriptId, episode, issues, outline, handlers) {
-      return streamSSE('/api/ai/episode/fix', {
-        script_id: scriptId, episode, issues, outline,
-      }, handlers);
+    fixEpisode(scriptId, episodeIndex, episode, issues) {
+      return request('/api/ai/episode/fix', {
+        method: 'POST',
+        body: { script_id: scriptId, episode_index: episodeIndex, episode, issues },
+      });
     },
-    rewriteSegment(scriptId, episode, segmentRange, instruction, handlers) {
-      return streamSSE('/api/ai/episode/rewrite-segment', {
-        script_id: scriptId, episode, segment_range: segmentRange, instruction,
-      }, handlers);
+    rewriteSegment(scriptId, episodeIndex, behavior, instruction, candidates) {
+      return request('/api/ai/episode/rewrite-segment', {
+        method: 'POST',
+        body: { script_id: scriptId, episode_index: episodeIndex, behavior, instruction, candidates: candidates || 2 },
+      });
     },
-    parseImport(scriptId, rawText, config, handlers) {
-      return streamSSE('/api/ai/import/parse', { script_id: scriptId, raw_text: rawText, config }, handlers);
+    parseImport(scriptId, text, file_name, episodes, ep_duration, tone) {
+      return request('/api/ai/import/parse', {
+        method: 'POST',
+        body: { text, file_name: file_name || '', episodes: episodes || 20, ep_duration: ep_duration || 90, tone: tone || '保持原作风味', script_id: scriptId || null },
+      });
     },
+  };
+
+  /* ============== AI 任务（队列轮询 / 管理） ============== */
+  const tasks = {
+    list(params = {}) { return request('/api/ai/tasks', { query: params }); },
+    get(id, includeEvents = false) {
+      return request(`/api/ai/tasks/${id}`, { query: includeEvents ? { include_events: 'true' } : {} });
+    },
+    cancel(id) { return request(`/api/ai/tasks/${id}/cancel`, { method: 'POST' }); },
+    retry(id) { return request(`/api/ai/tasks/${id}/retry`, { method: 'POST' }); },
+    remove(id) { return request(`/api/ai/tasks/${id}`, { method: 'DELETE' }); },
+    stats() { return request('/api/ai/tasks/stats'); },
   };
 
   /* ============== tags ============== */
@@ -296,7 +325,7 @@ const ApiClient = (() => {
     list(scriptId) { return request('/api/imports', { query: scriptId ? { script_id: scriptId } : {} }); },
   };
 
-  return { auth, scripts, ai, tags, imports, getToken, isLoggedIn, clearAuth };
+  return { auth, scripts, ai, tasks, tags, imports, getToken, isLoggedIn, clearAuth };
 })();
 
 window.ApiClient = ApiClient;

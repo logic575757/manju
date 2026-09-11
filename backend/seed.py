@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import Base, engine, SessionLocal
 import models
 from models import TagDictionary, AiProvider, PromptTemplate
+from config import settings
 
 
 TAG_DATA = {
@@ -54,62 +55,89 @@ def seed_ai_provider(db):
         db.add(provider)
         db.commit()
 
+    # 若 .env 配置了 LLM_API_KEY，则自动注册一个名为 "default-llm" 的真实 provider
+    if settings.llm_api_key and settings.llm_base_url and settings.llm_model:
+        name = settings.default_llm_provider if settings.default_llm_provider and settings.default_llm_provider != "mock" else "default-llm"
+        exists = db.query(AiProvider).filter(AiProvider.name == name).first()
+        if exists:
+            exists.provider = "openai"
+            exists.model_name = settings.llm_model
+            exists.base_url = settings.llm_base_url
+            exists.api_key_enc = settings.llm_api_key
+            exists.task_bindings = ["*"]
+            exists.is_active = True
+            exists.priority = 10
+            db.commit()
+        else:
+            provider = AiProvider(
+                name=name,
+                provider="openai",
+                model_name=settings.llm_model,
+                base_url=settings.llm_base_url,
+                api_key_enc=settings.llm_api_key,
+                task_bindings=["*"],
+                is_active=True,
+                priority=10,
+            )
+            db.add(provider)
+            db.commit()
+
 
 PROMPT_DATA = [
     {
         "task_key": "generate_outline",
-        "system_prompt": "你是一位资深短剧编剧...",
-        "user_prompt_template": "请根据以下配置生成16模块大纲：{config}",
+        "system_prompt": "你是一位资深短剧编剧，擅长男频女频爽点节奏、钩子设计和反转结构。请根据用户给出的配置生成短剧大纲。输出必须是严格的 JSON（不要包含任何解释或 markdown），根为对象，包含字段 outline（数组），每个元素结构：{\"id\":\"m1\",\"index\":1,\"title\":\"模块标题\",\"summary\":\"20-50字概要\",\"goal\":\"主角阶段目标\",\"conflict\":\"核心冲突\",\"twist\":\"钩子/反转\",\"ending\":\"落点\"}。通常生成 12-16 个模块，覆盖开篇/起势/发展/高潮/结局完整节奏。",
+        "user_prompt_template": "{config}",
     },
     {
         "task_key": "review_outline",
-        "system_prompt": "你是一位剧本审核专家...",
-        "user_prompt_template": "请审核以下大纲：{outline}",
+        "system_prompt": "你是一位短剧剧本审核专家。请从以下维度审核大纲：1.节奏与爽点密度 2.钩子设计 3.人物动机合理性 4.逻辑硬伤 5.情感冲突强度 6.分集可行性。输出严格 JSON，根对象包含 issues(数组，每个元素：{moduleId?:string,severity:'high'|'medium'|'low',category:string,suggestion:string}) 与 score(0-100整数)。问题要具体到模块，给出可执行修改建议。",
+        "user_prompt_template": "{payload}",
     },
     {
         "task_key": "generate_episode",
-        "system_prompt": "你是一位分镜编剧...",
-        "user_prompt_template": "请根据大纲和上下文生成分集分镜：{context}",
+        "system_prompt": "你是一位分镜编剧。请根据大纲上下文为指定集数生成分集分镜脚本。输出严格 JSON，根对象包含 episode 对象，结构为：{\"id\":\"eX\",\"index\":1,\"title\":\"本集标题\",\"summary\":\"本集概要60-120字\",\"duration\":90,\"cliffs\":[\"钩子1\"],\"acts\":[{\"id\":\"a1\",\"index\":1,\"title\":\"\",\"summary\":\"\",\"duration\":30,\"beats\":[{\"id\":\"b1\",\"index\":1,\"title\":\"\",\"summary\":\"\",\"goal\":\"\",\"conflict\":\"\",\"twist\":\"\",\"duration\":10,\"camera\":\"景别/运镜\",\"location\":\"场景\",\"charactersInFrame\":[\"c1\"],\"lines\":[{\"id\":\"l1\",\"index\":1,\"characterId\":\"c1\",\"text\":\"台词内容\",\"emotion\":\"情绪\",\"action\":\"动作提示\",\"voiceover\":false,\"duration\":3}]}]}]}。注意：duration单位为秒；每集时长通常60-120秒；lines中每个台词要指定characterId；beats.duration之和等于act.duration，acts之和等于episode.duration；每集结尾留钩子。",
+        "user_prompt_template": "{payload}",
     },
     {
         "task_key": "review_episode",
-        "system_prompt": "你是一位剧本审核专家...",
-        "user_prompt_template": "请审核此分集：{episode}",
+        "system_prompt": "你是一位剧本审核专家。请审核这一分集分镜，重点关注：1.节奏是否紧凑 2.台词是否贴合人设 3.钩子是否够强 4.时长是否合理 5.拍摄可行性 6.人物动机连贯性。输出严格 JSON，根对象包含 issues(数组) 与 score(0-100整数)；issues 元素：{actId?:string,beatId?:string,lineId?:string,severity:'high'|'medium'|'low',category:string,suggestion:string}。",
+        "user_prompt_template": "{payload}",
     },
     {
         "task_key": "fix_episode",
-        "system_prompt": "你是一位剧本修改专家...",
-        "user_prompt_template": "请修复以下问题：{issues}",
+        "system_prompt": "你是一位剧本修改专家。请根据审核意见修改分集分镜，保留未被指出的部分不变，只修改有问题的段落。输出严格 JSON，根对象包含 episode（修改后完整的 episode 对象，结构同 generate_episode 的输出）。",
+        "user_prompt_template": "{payload}",
     },
     {
         "task_key": "review_characters",
-        "system_prompt": "你是一位人物设定专家...",
-        "user_prompt_template": "请审核人物小传：{characters}",
+        "system_prompt": "你是一位人物设定专家。请审核这些人物小传，关注：1.人物动机是否清晰 2.人物关系是否有张力 3.人设是否立体有反差 4.是否工具人化 5.台词风格辨识度。输出严格 JSON，根对象包含 issues(数组，每个元素：{characterId?:string,severity:'high'|'medium'|'low',category:string,suggestion:string})。",
+        "user_prompt_template": "{payload}",
     },
     {
         "task_key": "rewrite_segment",
-        "system_prompt": "你是一位剧本润色专家...",
-        "user_prompt_template": "请按指令改写：{instruction}",
+        "system_prompt": "你是一位剧本润色专家。请按照用户指令改写指定段落（台词/动作/旁白等），提供多个风格化候选版本。输出严格 JSON，根对象包含 candidates（数组，2-4个字符串候选）。每个候选应保持剧情逻辑不变但语气/风格符合指令。",
+        "user_prompt_template": "{payload}",
     },
     {
         "task_key": "modify_outline_module",
-        "system_prompt": "你是一位大纲修改专家...",
-        "user_prompt_template": "请修改该模块：{module}",
+        "system_prompt": "你是一位大纲修改专家。请根据用户指令修改指定大纲模块，保持其他模块不变。输出严格 JSON，根对象包含 module（新的模块对象，包含 id/index/title/summary/goal/conflict/twist/ending）。",
+        "user_prompt_template": "{payload}",
     },
     {
         "task_key": "batch_modify_outline",
-        "system_prompt": "你是一位大纲修改专家...",
-        "user_prompt_template": "请批量修改：{modules}",
+        "system_prompt": "你是一位大纲修改专家。请根据用户的批量修改指令，对指定模块进行修改。输出严格 JSON，根对象包含 modules（数组，每个为修改后的模块完整对象）。只返回需要修改的那些模块。",
+        "user_prompt_template": "{payload}",
     },
     {
         "task_key": "generate_characters",
-        "system_prompt": "你是一位人物设计专家...",
-        "user_prompt_template": "请补全配角：{outline}",
+        "system_prompt": "你是一位人物设计专家。请根据已有大纲和主角设定，补全配角/反派/关键功能性角色。输出严格 JSON，根对象包含 characters（数组），每个角色结构：{\"id\":\"cX\",\"name\":\"姓名\",\"role\":\"主角/女主/反派/女配/男配/功能性角色\",\"age\":0,\"appearance\":\"外形描述（30-60字）\",\"personality\":\"性格关键词\",\"background\":\"背景前史\",\"goal\":\"核心诉求\",\"arc\":\"人物弧光（起点→转折→终点）\",\"voice\":\"台词风格\",\"relationships\":[{\"targetId\":\"cX\",\"type\":\"关系类型\",\"description\":\"关系描述\"}]}。生成3-6个角色。",
+        "user_prompt_template": "{payload}",
     },
     {
         "task_key": "parse_import",
-        "system_prompt": "你是一位剧本解析专家...",
-        "user_prompt_template": "请解析文本：{text}",
+        "system_prompt": "你是一位剧本解析专家。请从用户提供的原始剧本/故事文本中，提取结构化大纲与人物信息。输出严格 JSON，根对象包含：outline（数组，每个元素{id,index,title,summary,goal,conflict,twist,ending}）、characters（数组，每个元素{id,name,role,age,appearance,personality,background,goal,arc,voice,relationships}）、warnings（数组，字符串，表示识别到的不确定或缺失信息，可空）。若文本中某字段缺失，使用合理推断填充；id 使用 m1..mN、c1..cN。",
+        "user_prompt_template": "{text}",
     },
 ]
 
@@ -141,5 +169,9 @@ if __name__ == "__main__":
         seed_ai_provider(db)
         seed_prompts(db)
         print("✅ 种子数据初始化完成")
+        if settings.llm_api_key and settings.llm_base_url and settings.llm_model:
+            print(f"✅ 已注册默认真实 LLM provider: base_url={settings.llm_base_url} model={settings.llm_model}")
+        else:
+            print("ℹ️  未配置 LLM_API_KEY/LLM_BASE_URL/LLM_MODEL，AI 将使用 Mock 数据；填入 .env 后重新运行 seed.py 即可切换为真实模型")
     finally:
         db.close()

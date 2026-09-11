@@ -292,6 +292,8 @@ class EpisodePassOut(BaseModel):
 
 # ---------- AI Provider 模型管理 ----------
 class AiProviderIn(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     name: str = Field(min_length=1, max_length=64, description="唯一标识名，如 deepseek/gpt4o")
     provider: str = Field(default="openai", description="协议类型，目前支持 openai（兼容协议）/mock")
     model_name: str = Field(min_length=1, max_length=128, description="模型名，如 deepseek-chat / gpt-4o-mini")
@@ -303,6 +305,8 @@ class AiProviderIn(BaseModel):
 
 
 class AiProviderUpdate(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     provider: Optional[str] = None
     model_name: Optional[str] = None
     base_url: Optional[str] = None
@@ -325,7 +329,7 @@ class AiProviderOut(BaseModel):
     priority: int
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class AiProviderBindReq(BaseModel):

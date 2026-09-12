@@ -7740,6 +7740,7 @@ input[type="checkbox"] {
     if (!raw && (!fileInput || !fileInput.files || !fileInput.files[0])) {
       return showToast('请粘贴文本或选择文件', 'error');
     }
+    try { localStorage.setItem(PRESET_KEY, JSON.stringify(preset)); } catch (e) {}
     const epCount = parseInt(imp.episodes, 10) || parseInt((document.getElementById('impEpisodes')||{}).value, 10) || 10;
     const epDur = parseInt(imp.epDuration, 10) || parseInt((document.getElementById('impEpDuration')||{}).value, 10) || 90;
     const tone = imp.tone || (document.getElementById('impTone')||{}).value || '保持原作风味';

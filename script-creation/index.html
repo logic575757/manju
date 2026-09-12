@@ -3582,14 +3582,15 @@ input[type="checkbox"] {
   const episodeIssues = {};
 
   let currentStep = 0;
+  let maxReachedStep = 0;
 
   function renderStepper() {
     const container = document.getElementById('stepper');
     container.innerHTML = steps.map((s, idx) => {
       const completed = idx < currentStep;
       const active = idx === currentStep;
-      const clickable = idx <= currentStep ? 'onclick="setStep(' + idx + ')"' : '';
-      const cursor = idx <= currentStep ? 'cursor-pointer' : 'cursor-default opacity-60';
+      const clickable = idx <= maxReachedStep ? 'onclick="setStep(' + idx + ')"' : '';
+      const cursor = idx <= maxReachedStep ? 'cursor-pointer' : 'cursor-default opacity-60';
       return `
         <div class="step-item ${active ? 'active' : ''} ${completed ? 'completed' : ''} ${cursor}" ${clickable}>
           <div class="step-dot">${completed ? '✓' : (idx + 1)}</div>
@@ -3602,6 +3603,7 @@ input[type="checkbox"] {
 
   function setStep(idx) {
     currentStep = idx;
+    if (idx > maxReachedStep) maxReachedStep = idx;
     renderStepper();
     document.querySelectorAll('.step-panel').forEach((el, i) => {
       el.classList.toggle('active', i === idx);
@@ -5773,6 +5775,7 @@ input[type="checkbox"] {
       episodes: JSON.parse(JSON.stringify(episodes || [])),
       outline: typeof outlineData !== 'undefined' ? JSON.parse(JSON.stringify(outlineData)) : null,
       characters: typeof characterData !== 'undefined' ? JSON.parse(JSON.stringify(characterData)) : null,
+      maxStep: (typeof maxReachedStep !== 'undefined' ? maxReachedStep : 0)
     };
   }
   function _snapshotSummary(snap) {
@@ -6904,6 +6907,7 @@ input[type="checkbox"] {
       showView(VIEW_FLOW);
       // 跳到对应步骤
       const step = Math.max(0, Math.min(3, s.step || 0));
+      maxReachedStep = Math.max(step, (typeof content.maxStep === 'number' ? content.maxStep : 0));
       setStep(step);
       renderOutline(); renderCharacters(); renderEpisodes();
       ensureEpisodesBuilt && ensureEpisodesBuilt();

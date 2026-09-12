@@ -189,7 +189,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
   age: 数字（15-60）
   role: "男主/女主/反派/重要配角/功能性角色"
   tags: ["标签1","标签2"]
-  appearance: {"height":数字（150-195，单位cm，不要写成"168cm"这种带单位字符串）,"faceShape":"脸型","eyeShape":"眼型","noseShape":"鼻型","lipShape":"唇型","skinTone":"肤色","bodyShape":"体型","mark":["标志特征"]}
+  appearance: {"height":数字（150-195，单位cm，不要写成"168cm"这种带单位字符串）,"faceShape":"脸型","eyeShape":"眼型","noseShape":"鼻型","lipShape":"唇型","skinTone":"肤色","bodyShape":"体型","mark":["标志特征"],"reasons":{"height":"为何选此身高的推荐理由","faceShape":"为何选此脸型","eyeShape":"为何选此眼型","noseShape":"为何选此鼻型","lipShape":"为何选此唇型","skinTone":"为何选此肤色","bodyShape":"为何选此体型","mark":"为何设置这些标志特征"}}
   personality: "性格关键词组合"
   background: "身份背景/前史（50-120字）"
   tagline: "口头禅/金句"
@@ -217,7 +217,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 4. must 中指定的要素必须出现，avoid 中指定的套路必须避开
 5. 每卷结尾必须有钩子(hook)，最后一卷结尾必须留悬念或大反转
 6. content 中禁止出现"本模块""此处省略""略"等占位词
-7. characters 数组中每个角色都必须给出 gender（男/女）、age（数字）和 appearance（含 height/faceShape/eyeShape/noseShape/lipShape/skinTone/bodyShape/mark），不能留空""",
+7. characters 数组中每个角色都必须给出 gender（男/女）、age（数字）和 appearance（含 height/faceShape/eyeShape/noseShape/lipShape/skinTone/bodyShape/mark 及 reasons 每个维度一句推荐理由），不能留空""",
         "user_prompt_template": """请根据以下创作配置生成短剧大纲（16模块严格JSON）：
 
 {config_json}""",
@@ -332,7 +332,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
       "age": 0,
       "role": "男主/女主/反派/女配/男配/长辈/功能性角色",
       "tags": ["标签1","标签2"],
-      "appearance": {"height":"","faceShape":"","eyeShape":"","noseShape":"","lipShape":"","skinTone":"","bodyShape":"","mark":["特征疤/痣等"]},
+      "appearance": {"height":"","faceShape":"","eyeShape":"","noseShape":"","lipShape":"","skinTone":"","bodyShape":"","mark":["特征疤/痣等"],"reasons":{"height":"","faceShape":"","eyeShape":"","noseShape":"","lipShape":"","skinTone":"","bodyShape":"","mark":""}},
       "personality": "性格关键词组合",
       "background": "身份背景/前史（100-200字）",
       "tagline": "口头禅/金句",
@@ -349,6 +349,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 注意：
 - 生成3-6个角色，覆盖反派/关键对手/关键盟友/推动剧情的功能性角色
 - 不要与已有角色在人设/功能上重复
+- 每个角色的 appearance.reasons 必须为每个维度各写一句推荐理由（说明为何该外形选择契合其人设/身份/剧情定位）
 - id从已有角色最大序号+1开始（用户会告诉你已有角色列表）""",
         "user_prompt_template": """请根据以下信息补全配角/反派：
 
@@ -599,7 +600,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
     "style": "爽文短剧/悬疑推理/甜宠治愈/古风权谋/..."
   },
   "outline": [16个大纲模块数组，结构同generate_outline],
-  "characters": [角色数组，结构同generate_characters，每个角色字段：{"id":"c1","name":"姓名","gender":"男/女","age":数字,"role":"男主/女主/反派/重要配角/功能性角色","appearance":{"height":数字,"faceShape":"脸型","eyeShape":"眼型","noseShape":"鼻型","lipShape":"唇型","skinTone":"肤色","bodyShape":"体型","mark":["标志特征"]},"personality":"性格关键词","background":"背景前史","goal":"核心诉求","arc":"人物弧光","voice":"台词风格","relationships":[{"targetId":"cX","type":"关系类型","description":"关系描述"}]}]],
+  "characters": [角色数组，结构同generate_characters，每个角色字段：{"id":"c1","name":"姓名","gender":"男/女","age":数字,"role":"男主/女主/反派/重要配角/功能性角色","appearance":{"height":数字,"faceShape":"脸型","eyeShape":"眼型","noseShape":"鼻型","lipShape":"唇型","skinTone":"肤色","bodyShape":"体型","mark":["标志特征"],"reasons":{"height":"推荐理由","faceShape":"推荐理由","eyeShape":"推荐理由","noseShape":"推荐理由","lipShape":"推荐理由","skinTone":"推荐理由","bodyShape":"推荐理由","mark":"推荐理由"}},"personality":"性格关键词","background":"背景前史","goal":"核心诉求","arc":"人物弧光","voice":"台词风格","relationships":[{"targetId":"cX","type":"关系类型","description":"关系描述"}]}]],
   "episodes": [
     {"id":1, "title":"集标题","hook":"本集钩子/断章"}
   ],
@@ -610,7 +611,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 - 必须严格按照指定情绪基调(tone)改写：爽感化=加爽点节奏+强化反转；悬疑化=加伏笔+留白+反转；甜宠化=强化男女主互动+减少虐点；保持原味=尽量保留原文情节与文风
 - episodes数组长度必须严格等于目标集数
 - 保留原文关键剧情节点，不要乱加原创剧情（除非原文明显不足支撑集数）
-- characters 数组中每个角色都必须给出 gender（男/女）、age（数字）和完整 appearance 对象（含 height/faceShape/eyeShape/noseShape/lipShape/skinTone/bodyShape/mark），不能留空或省略；原文缺失时按角色定位合理推断填充""",
+- characters 数组中每个角色都必须给出 gender（男/女）、age（数字）和完整 appearance 对象（含 height/faceShape/eyeShape/noseShape/lipShape/skinTone/bodyShape/mark 及 reasons 每个维度一句推荐理由），不能留空或省略；原文缺失时按角色定位合理推断填充""",
         "user_prompt_template": """请解析以下原始文本并生成结构化剧本：
 
 【原文】

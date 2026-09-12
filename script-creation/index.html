@@ -605,6 +605,10 @@ input[type="checkbox"] {
       .app-opt.multi.selected { background:var(--brand-purple); border-color:var(--brand-purple); }
       .app-dim-actions { display:flex; align-items:center; gap:8px; margin-top: 8px; }
       .app-dim-actions .wf-btn-ghost { font-size:10px; padding:2px 8px; }
+      .app-dim-reason { margin-top:10px; padding-top:8px; border-top:1px dashed var(--wireframe-line); display:flex; gap:6px; align-items:flex-start; }
+      .app-dim-reason-tag { flex:none; font-size:10px; line-height:1.5; padding:1px 6px; border-radius:4px; background:var(--wireframe-primary-soft); color:var(--wireframe-primary); font-weight:600; white-space:nowrap; }
+      .app-dim-reason-text { font-size:11px; line-height:1.55; color:var(--wireframe-ink-2); }
+      .app-dim-reason-empty { display:block; font-size:11px; line-height:1.55; color:var(--wireframe-ink-3); opacity:.55; }
       /* Slider */
       .slider-dim { padding:12px; }
       .app-slider-value { font-size:13px; font-weight:600; color:var(--wireframe-ink); font-variant-numeric: tabular-nums; }
@@ -4459,6 +4463,10 @@ input[type="checkbox"] {
 
   function renderDimHtml(dim, selected) {
     const curVal = selected[dim.key];
+    const reason = (selected && selected.reasons && selected.reasons[dim.key]) || '';
+    const reasonHtml = reason
+      ? `<div class="app-dim-reason"><span class="app-dim-reason-tag">AI 推荐</span><span class="app-dim-reason-text">${escapeHtml(reason)}</span></div>`
+      : `<div class="app-dim-reason app-dim-reason-empty">AI 推荐理由：待生成</div>`;
     if (dim.type === 'slider') {
       const v = curVal != null ? curVal : (dim.defaults.c1 || dim.min);
       return `
@@ -4474,6 +4482,7 @@ input[type="checkbox"] {
               <span>${dim.max}${dim.unit}</span>
             </div>
           </div>
+          ${reasonHtml}
         </div>`;
     }
     if (dim.type === 'multi') {
@@ -4491,6 +4500,7 @@ input[type="checkbox"] {
           <div class="app-dim-actions mt-2">
             <button class="wf-btn-ghost" onclick="event.stopPropagation();customAppearanceInput('${dim.key}','${escapeJsAttr(dim.label)}',true)">+ 自定义</button>
           </div>
+          ${reasonHtml}
         </div>`;
     }
     // radio
@@ -4507,6 +4517,7 @@ input[type="checkbox"] {
         <div class="app-dim-actions mt-2">
           <button class="wf-btn-ghost" onclick="event.stopPropagation();customAppearanceInput('${dim.key}','${escapeJsAttr(dim.label)}',false)">+ 自定义</button>
         </div>
+        ${reasonHtml}
       </div>`;
   }
 

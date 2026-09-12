@@ -247,6 +247,30 @@ MOCK_CHARACTERS = [
 ]
 
 
+_APPEARANCE_REASON_LABELS = {
+    "height": "身高", "faceShape": "脸型", "eyeShape": "眼型",
+    "noseShape": "鼻型", "lipShape": "唇型", "skinTone": "肤色",
+    "bodyShape": "体型", "mark": "标志特征",
+}
+
+
+def _attach_appearance_reasons(characters):
+    for c in characters:
+        app = c.get("appearance")
+        if not isinstance(app, dict):
+            continue
+        reasons = {}
+        for key, label in _APPEARANCE_REASON_LABELS.items():
+            val = app.get(key)
+            if key == "mark":
+                val_txt = "、".join(val) if isinstance(val, list) and val else "无明显标志"
+            else:
+                val_txt = str(val) if val not in (None, "") else "待定"
+            reasons[key] = f"{label}「{val_txt}」契合该角色身份与气质，能强化其视觉记忆点，便于工业化分镜统一还原。"
+        app["reasons"] = reasons
+    return characters
+
+
 def _b(dur, loc, visual, character, action, dialog, dialog_tag, emotion):
     return {
         "duration": dur, "location": loc, "visual": visual,
@@ -594,6 +618,7 @@ class MockProvider:
             new_chars = copy.deepcopy(MOCK_CHARACTERS[2:4])
             for i, c in enumerate(new_chars):
                 c["id"] = f"c{len(existing) + i + 1}"
+        new_chars = _attach_appearance_reasons(new_chars)
         yield sse_event("result", {"characters": new_chars})
         yield sse_done({"characters": new_chars})
 
@@ -671,6 +696,7 @@ class MockProvider:
         await asyncio.sleep(0.6)
         outline = copy.deepcopy(MOCK_OUTLINE)
         characters = copy.deepcopy(MOCK_CHARACTERS[:4])
+        characters = _attach_appearance_reasons(characters)
         yield sse_event("result", {"outline": outline, "characters": characters, "warnings": ["已自动推断20集结构，建议人工审核分集边界。"]})
         yield sse_done({"outline": outline, "characters": characters})
 

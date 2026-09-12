@@ -837,7 +837,7 @@ class MockProvider:
                 "question": "",
                 "options": [],
             }
-        elif story and not has_outline:
+        elif story:
             if "大纲" in intent:
                 result = {
                     "route": "half_outline",

@@ -7903,7 +7903,7 @@ input[type="checkbox"] {
     await submitAiTask(currentScriptId, 'dispatch_short_drama', '路由判断', () =>
       ApiClient.ai.dispatchShortDrama(currentScriptId, {
         story_text: storyText,
-        has_outline: !!(outlineData && outlineData.length),
+        has_outline: false,
         user_intent: '大纲',
         extra_requirement: ai.prompt || '',
       })
@@ -7958,7 +7958,7 @@ input[type="checkbox"] {
     await submitAiTask(currentScriptId, 'dispatch_short_drama', '路由判断', () =>
       ApiClient.ai.dispatchShortDrama(currentScriptId, {
         story_text: text,
-        has_outline: !!(outlineData && outlineData.length),
+        has_outline: false,
         user_intent: '大纲',
         extra_requirement: tone || '',
       })

@@ -85,6 +85,11 @@ def _sse_fmt(event: str, data: Any, sep: str = "\n\n") -> str:
 def _submit(task_key: str, payload, user: User, db: Session) -> AiTaskSubmitOut:
     skill = _load_skill(db, task_key)
     params = payload.model_dump() if hasattr(payload, "model_dump") else dict(payload)
+    if task_key == "parse_import":
+        if params.get("episodes_free"):
+            params["episodes_hint"] = "自由发挥（由 AI 根据原文剧情体量自行决定集数）"
+        else:
+            params["episodes_hint"] = str(params.get("episodes", 20))
     script_field = skill.script_id_field
     script_id = params.get(script_field) if script_field else None
     version_id = params.get("version_id")

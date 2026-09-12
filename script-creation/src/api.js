@@ -270,10 +270,10 @@ const ApiClient = (() => {
         body: { script_id: scriptId, episode_index: episodeIndex, behavior, instruction, candidates: candidates || 2 },
       });
     },
-    parseImport(scriptId, text, file_name, episodes, ep_duration, tone) {
+    parseImport(scriptId, text, file_name, episodes, ep_duration, tone, episodes_free) {
       return request('/api/ai/import/parse', {
         method: 'POST',
-        body: { text, file_name: file_name || '', episodes: episodes || 20, ep_duration: ep_duration || 90, tone: tone || '保持原作风味', script_id: scriptId || null },
+        body: { text, file_name: file_name || '', episodes: episodes || 20, episodes_free: !!episodes_free, ep_duration: ep_duration || 90, tone: tone || '保持原作风味', script_id: scriptId || null },
       });
     },
   };

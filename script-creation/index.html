@@ -2385,6 +2385,10 @@ input[type="checkbox"] {
               <div class="wf-card rounded-xl p-3">
                 <label class="block text-xs text-muted-foreground mb-1">解析集数</label>
                 <input id="impEpisodes" type="number" class="mock-input" value="10" >
+                <label class="flex items-center gap-1.5 mt-2 text-[11px] text-muted-foreground cursor-pointer select-none">
+                  <input id="impEpisodesFree" type="checkbox" class="accent-primary" onchange="toggleEpisodesFree()">
+                  自由发挥（由 AI 决定集数）
+                </label>
               </div>
               <div class="wf-card rounded-xl p-3">
                 <label class="block text-xs text-muted-foreground mb-1">单集秒数</label>
@@ -6042,6 +6046,7 @@ input[type="checkbox"] {
       text: (document.getElementById('impText')?.value) || '',
       fileName: (document.getElementById('impFileName')?.textContent) || '',
       episodes: parseInt(document.getElementById('impEpisodes')?.value, 10) || 10,
+      episodesFree: !!(document.getElementById('impEpisodesFree')?.checked),
       epDuration: parseInt(document.getElementById('impEpDuration')?.value, 10) || 90,
       tone: (document.getElementById('impTone')?.value) || '保持原作风味'
     };
@@ -6082,8 +6087,10 @@ input[type="checkbox"] {
       const m = p.imp;
       if (document.getElementById('impText')) document.getElementById('impText').value = m.text || '';
       if (document.getElementById('impEpisodes')) document.getElementById('impEpisodes').value = m.episodes || 10;
+      if (document.getElementById('impEpisodesFree')) document.getElementById('impEpisodesFree').checked = !!m.episodesFree;
       if (document.getElementById('impEpDuration')) document.getElementById('impEpDuration').value = m.epDuration || 90;
       if (document.getElementById('impTone')) document.getElementById('impTone').value = m.tone || '保持原作风味';
+      if (typeof toggleEpisodesFree === 'function') toggleEpisodesFree();
       const fName = document.getElementById('impFileName');
       if (fName) {
         if (m.fileName) { fName.textContent = '已上传：' + m.fileName; fName.classList.remove('hidden'); }
@@ -6266,9 +6273,19 @@ input[type="checkbox"] {
     }
   }
 
+  function toggleEpisodesFree() {
+    const free = document.getElementById('impEpisodesFree');
+    const num = document.getElementById('impEpisodes');
+    if (!free || !num) return;
+    num.disabled = free.checked;
+    num.classList.toggle('opacity-50', free.checked);
+  }
+
   function clearImportForm() {
     if (document.getElementById('impText')) document.getElementById('impText').value = '';
     if (document.getElementById('impEpisodes')) document.getElementById('impEpisodes').value = 10;
+    if (document.getElementById('impEpisodesFree')) document.getElementById('impEpisodesFree').checked = false;
+    if (typeof toggleEpisodesFree === 'function') toggleEpisodesFree();
     if (document.getElementById('impEpDuration')) document.getElementById('impEpDuration').value = 90;
     if (document.getElementById('impTone')) document.getElementById('impTone').value = '保持原作风味';
     const fName = document.getElementById('impFileName');
@@ -7758,6 +7775,7 @@ input[type="checkbox"] {
       return showToast('请粘贴文本或选择文件', 'error');
     }
     try { localStorage.setItem(PRESET_KEY, JSON.stringify(preset)); } catch (e) {}
+    const episodesFree = !!(imp.episodesFree || (document.getElementById('impEpisodesFree')||{}).checked);
     const epCount = parseInt(imp.episodes, 10) || parseInt((document.getElementById('impEpisodes')||{}).value, 10) || 10;
     const epDur = parseInt(imp.epDuration, 10) || parseInt((document.getElementById('impEpDuration')||{}).value, 10) || 90;
     const tone = imp.tone || (document.getElementById('impTone')||{}).value || '保持原作风味';
@@ -7772,7 +7790,7 @@ input[type="checkbox"] {
         text = res.raw_text || text;
       } catch (err) { return showToast('上传失败：' + (err.message || err), 'error'); }
     }
-    await submitAiTask(currentScriptId, 'parse_import', '导入解析', () => ApiClient.ai.parseImport(currentScriptId, text, fileName, epCount, epDur, tone));
+    await submitAiTask(currentScriptId, 'parse_import', '导入解析', () => ApiClient.ai.parseImport(currentScriptId, text, fileName, epCount, epDur, tone, episodesFree));
   }
   window.parseImport = parseImportBridge;
 

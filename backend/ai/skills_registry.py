@@ -609,7 +609,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 
 【注意】
 - 必须严格按照指定情绪基调(tone)改写：爽感化=加爽点节奏+强化反转；悬疑化=加伏笔+留白+反转；甜宠化=强化男女主互动+减少虐点；保持原味=尽量保留原文情节与文风
-- episodes数组长度必须严格等于目标集数
+- episodes数组长度应与目标集数保持一致（当目标集数为「自由发挥」时，由你根据原文剧情体量自行合理决定集数）
 - 保留原文关键剧情节点，不要乱加原创剧情（除非原文明显不足支撑集数）
 - characters 数组中每个角色都必须给出 gender（男/女）、age（数字）和完整 appearance 对象（含 height/faceShape/eyeShape/noseShape/lipShape/skinTone/bodyShape/mark 及 reasons 每个维度一句推荐理由），不能留空或省略；原文缺失时按角色定位合理推断填充""",
         "user_prompt_template": """请解析以下原始文本并生成结构化剧本：
@@ -618,7 +618,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 {text}
 
 【目标参数】
-- 目标集数：{episodes}
+- 目标集数：{episodes_hint}
 - 单集时长：{ep_duration}秒
 - 情绪基调：{tone}
 - 文件名（参考）：{file_name}""",

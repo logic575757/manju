@@ -230,6 +230,7 @@ class AiParseImportReq(BaseModel):
     text: str
     file_name: Optional[str] = ""
     episodes: int = 20
+    episodes_free: bool = False
     ep_duration: int = 90
     tone: str = "保持原作风味"
     script_id: Optional[int] = None

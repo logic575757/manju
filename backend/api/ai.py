@@ -21,6 +21,7 @@ from schemas import (
     AiReviewOutlineReq, AiReviewCharactersReq, AiGenerateCharactersReq,
     AiGenerateEpisodeReq, AiReviewEpisodeReq, AiFixEpisodeReq,
     AiRewriteSegmentReq, AiParseImportReq, AiDispatchShortDramaReq,
+    AiShortDramaHalfOutlineReq, AiShortDramaFullScriptReq, AiShortDramaEditEpisodeReq,
     AiTaskSubmitOut,
 )
 from ai.queue import get_queue, estimated_wait
@@ -47,6 +48,9 @@ SCHEMA_MAP: Dict[str, Type[BaseModel]] = {
     "fix_episode": AiFixEpisodeReq,
     "rewrite_segment": AiRewriteSegmentReq,
     "parse_import": AiParseImportReq,
+    "short-drama-half-outline": AiShortDramaHalfOutlineReq,
+    "short-drama-full-script": AiShortDramaFullScriptReq,
+    "short-drama-edit-episode": AiShortDramaEditEpisodeReq,
 }
 
 
@@ -87,7 +91,7 @@ def _sse_fmt(event: str, data: Any, sep: str = "\n\n") -> str:
 def _submit(task_key: str, payload, user: User, db: Session) -> AiTaskSubmitOut:
     skill = _load_skill(db, task_key)
     params = payload.model_dump() if hasattr(payload, "model_dump") else dict(payload)
-    if task_key == "parse_import":
+    if task_key in ("parse_import", "short-drama-half-outline"):
         if params.get("episodes_free"):
             params["episodes_hint"] = "自由发挥（由 AI 根据原文剧情体量自行决定集数）"
         else:

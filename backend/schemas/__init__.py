@@ -246,6 +246,31 @@ class AiParseImportReq(BaseModel):
     script_id: Optional[int] = None
 
 
+class AiShortDramaHalfOutlineReq(BaseModel):
+    text: str
+    file_name: Optional[str] = ""
+    episodes: int = 20
+    episodes_free: bool = False
+    ep_duration: int = 90
+    tone: str = "保持原作风味"
+    script_id: Optional[int] = None
+
+
+class AiShortDramaFullScriptReq(BaseModel):
+    text: Optional[str] = ""
+    outline: Optional[List[dict]] = None
+    episodes_hint: Optional[str] = "自由发挥"
+    ep_duration: int = 90
+    script_id: Optional[int] = None
+
+
+class AiShortDramaEditEpisodeReq(BaseModel):
+    script_id: Optional[int] = None
+    specified_episodes: Optional[int] = None
+    episode_script: Optional[str] = ""
+    story_text: Optional[str] = ""
+
+
 class AiTaskSubmitOut(BaseModel):
     task_id: int
     status: str

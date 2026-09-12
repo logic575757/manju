@@ -7270,6 +7270,9 @@ input[type="checkbox"] {
       rewrite_segment: '片段改写',
       parse_import: '导入解析',
       dispatch_short_drama: '路由判断',
+      'short-drama-half-outline': '短剧半套大纲',
+      'short-drama-full-script': '短剧分镜剧本',
+      'short-drama-edit-episode': '短剧分镜修改',
     };
     return labels[taskKey] || 'AI 任务';
   }
@@ -7666,6 +7669,7 @@ input[type="checkbox"] {
         if (typeof closeLocalAiRewrite === 'function') closeLocalAiRewrite();
         break;
       }
+      case 'short-drama-half-outline':
       case 'parse_import': {
         let parsed = result;
         if (parsed && parsed.result && typeof parsed.result === 'object' && !parsed.outline && !parsed.characters && !parsed.episodes) parsed = parsed.result;
@@ -7749,7 +7753,15 @@ input[type="checkbox"] {
       }
       return;
     }
-    submitAiTask(scriptId, 'generate_outline', '大纲生成', () => ApiClient.ai.generateOutline(scriptId, params));
+    const halfParams = {
+      text: ctx.storyText || params.text || params.prompt || '',
+      file_name: params.file_name || params.fileName || '',
+      episodes: parseInt(params.episodes, 10) || 20,
+      episodes_free: !!params.episodes_free,
+      ep_duration: parseInt(params.ep_duration, 10) || 90,
+      tone: params.tone || '保持原作风味',
+    };
+    submitAiTask(scriptId, 'short-drama-half-outline', '短剧半套大纲', () => ApiClient.ai.halfOutline(scriptId, halfParams));
   }
 
   function _showShortDramaAsk(ctx) {
@@ -7929,7 +7941,28 @@ input[type="checkbox"] {
         text = res.raw_text || text;
       } catch (err) { return showToast('上传失败：' + (err.message || err), 'error'); }
     }
-    await submitAiTask(currentScriptId, 'parse_import', '导入解析', () => ApiClient.ai.parseImport(currentScriptId, text, fileName, epCount, epDur, tone, episodesFree));
+    const halfParams = {
+      text: text,
+      file_name: fileName,
+      episodes: epCount,
+      episodes_free: episodesFree,
+      ep_duration: epDur,
+      tone: tone,
+    };
+    _shortDramaDispatchCtx = {
+      scriptId: currentScriptId,
+      intent: '大纲',
+      params: halfParams,
+      storyText: text,
+    };
+    await submitAiTask(currentScriptId, 'dispatch_short_drama', '路由判断', () =>
+      ApiClient.ai.dispatchShortDrama(currentScriptId, {
+        story_text: text,
+        has_outline: !!(outlineData && outlineData.length),
+        user_intent: '大纲',
+        extra_requirement: tone || '',
+      })
+    );
   }
   window.parseImport = parseImportBridge;
 

@@ -568,6 +568,39 @@ def _build_half_outline():
     return outline, episodes
 
 
+def _resize_half_outline(outline, episodes, count):
+    m6_episodes = []
+    new_episodes = []
+    for ep_idx in range(1, count + 1):
+        title, hook = _EP_TITLES.get(ep_idx, (f"第{ep_idx}集", f"第{ep_idx}集剧情推进与钩子"))
+        m6_episodes.append({
+            "id": ep_idx,
+            "title": title,
+            "hook": hook,
+            "event": f"第{ep_idx}集核心事件：{hook}",
+            "cliff": f"第{ep_idx}集结尾悬念：{hook}",
+            "emotion_start": "压迫" if ep_idx <= 3 else "紧张",
+            "emotion_end": "悬念",
+            "intensity": 9 if ep_idx >= 5 else 6,
+            "scene": "现代都市 日/夜",
+            "foreshadow": f"第{ep_idx}集埋设伏笔动作",
+            "hook_type": "反转" if ep_idx % 3 == 0 else "悬念",
+        })
+        new_episodes.append({"id": ep_idx, "title": title, "hook": hook})
+
+    for m in outline:
+        if m.get("id") == "m1":
+            meta = m.get("meta") or {}
+            meta["episodes"] = count
+            m["meta"] = meta
+            m["content"] = f"题材：豪门复仇/萌宝/甜宠；目标：{count}集×90秒竖屏短剧。"
+        elif m.get("id") == "m6":
+            m["episodes"] = m6_episodes
+            m["summary"] = f"{count}集分集目录，每集含钩子与悬念。"
+            m["content"] = "分集目录见 episodes 字段，供分镜生成逐集展开。"
+    return outline, new_episodes
+
+
 class MockProvider:
     name = "mock"
     model_name = "mock-v1"
@@ -585,6 +618,9 @@ class MockProvider:
         "fix_episode": "fix_episode",
         "rewrite_segment": "rewrite_segment",
         "parse_import": "parse_import",
+        "short-drama-half-outline": "short_drama_half_outline",
+        "short-drama-full-script": "short_drama_full_script",
+        "short-drama-edit-episode": "short_drama_edit_episode",
     }
 
     async def run_skill(
@@ -859,6 +895,83 @@ class MockProvider:
             "episodes": episodes,
             "warnings": ["已自动推断20集结构，建议人工审核分集边界。"],
         }
+        yield sse_event("result", result)
+        yield sse_done(result)
+
+    async def short_drama_half_outline(self, req: dict) -> AsyncGenerator[str, None]:
+        import asyncio
+        text = (req.get("text") or "").strip()
+        file_name = req.get("file_name", "")
+        tone = (req.get("tone") or "").strip() or "保持原作风味"
+        episodes_hint = req.get("episodes_hint")
+        try:
+            ep_count = int(str(episodes_hint)) if episodes_hint and str(episodes_hint).isdigit() else 20
+        except Exception:
+            ep_count = 20
+        ep_count = max(1, min(ep_count, 60))
+
+        yield sse_event("phase", {"phase": "parsing", "message": f"正在解析文本并生成{ep_count}集半套大纲..."})
+        await asyncio.sleep(0.6)
+
+        outline, episodes = _build_half_outline()
+        if ep_count != 20:
+            outline, episodes = _resize_half_outline(outline, episodes, ep_count)
+
+        characters = copy.deepcopy(MOCK_CHARACTERS[:4])
+        characters = _attach_appearance_reasons(characters)
+
+        text_snippet = (text[:20] + "…") if len(text) > 20 else (text or file_name or "未提供")
+        style = tone if tone != "保持原作风味" else "爽文短剧"
+        result = {
+            "detected": {
+                "themes": ["豪门", "复仇", "重生"],
+                "plots": ["复仇夺产", "甜宠", "商战"],
+                "emotions": ["爽感", "虐心", "甜宠"],
+                "time": "现代都市",
+                "style": style,
+            },
+            "outline": outline,
+            "characters": characters,
+            "episodes": episodes,
+            "warnings": [
+                f"已根据导入文本（{text_snippet}）按「{tone}」解析并生成{ep_count}集结构，建议人工审核分集边界。",
+            ],
+        }
+        yield sse_event("result", result)
+        yield sse_done(result)
+
+    async def short_drama_full_script(self, req: dict) -> AsyncGenerator[str, None]:
+        import asyncio
+        outline = req.get("outline") or []
+        yield sse_event("phase", {"phase": "writing", "message": "正在生成短剧分镜剧本..."})
+        await asyncio.sleep(0.5)
+        ep1 = _get_episode_data(1, outline)
+        ep2 = _get_episode_data(2, outline)
+        result = {"episodes": [ep1, ep2]}
+        yield sse_event("result", result)
+        yield sse_done(result)
+
+    async def short_drama_edit_episode(self, req: dict) -> AsyncGenerator[str, None]:
+        import asyncio
+        specified = req.get("specified_episodes")
+        try:
+            ep_idx = int(specified) if specified else 1
+        except Exception:
+            ep_idx = 1
+        yield sse_event("phase", {"phase": "reviewing", "message": f"正在审核修改第{ep_idx}集..."})
+        await asyncio.sleep(0.5)
+        ep_data = _get_episode_data(ep_idx, [])
+        issues = [
+            {
+                "id": "iss_1",
+                "priority": "T1",
+                "type": "hook",
+                "target": {"si": 0, "ci": 0, "bi": 0},
+                "text": "开场钩子可以更有威胁感。",
+                "suggestion": "强化开场视觉冲击，让威胁信号更明确。",
+            },
+        ]
+        result = {"episode": ep_data, "issues": issues, "resolved_issue_ids": ["iss_1"]}
         yield sse_event("result", result)
         yield sse_done(result)
 

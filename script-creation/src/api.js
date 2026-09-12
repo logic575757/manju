@@ -282,6 +282,12 @@ const ApiClient = (() => {
         body: { script_id: scriptId, ...(params || {}) },
       });
     },
+    halfOutline(scriptId, params) {
+      return request('/api/ai/short-drama/half-outline', {
+        method: 'POST',
+        body: { script_id: scriptId, ...(params || {}) },
+      });
+    },
   };
 
   /* ============== AI 任务（队列轮询 / 管理） ============== */

@@ -27,6 +27,47 @@ BUILTIN_SKILLS: Dict[str, Dict[str, Any]] = {
         "script_id_field": "script_id",
     },
 
+    # ========= 短剧 Skill（由 dispatcher 派发） =========
+    "short-drama-half-outline": {
+        "name": "短剧半套大纲",
+        "description": "根据故事文本/导入文本生成6模块半套大纲（基础信息/梗概/人物/冲突/剧情走向/分集目录），并附带核心角色与分集骨架。",
+        "category": "short_drama",
+        "api_path": "short-drama/half-outline",
+        "result_key": None,
+        "prompt_version": "v1",
+        "temperature": 0.6,
+        "priority": 90,
+        "timeout": 300,
+        "max_tokens": 16384,
+        "script_id_field": "script_id",
+    },
+    "short-drama-full-script": {
+        "name": "短剧分镜剧本",
+        "description": "根据故事文本/半套大纲生成四层分镜剧本（storyboards/cameras/behaviors），严格遵守时长/对白密度/钩子位置。",
+        "category": "short_drama",
+        "api_path": "short-drama/full-script",
+        "result_key": None,
+        "prompt_version": "v1",
+        "temperature": 0.8,
+        "priority": 90,
+        "timeout": 360,
+        "max_tokens": 16384,
+        "script_id_field": "script_id",
+    },
+    "short-drama-edit-episode": {
+        "name": "短剧分镜审核修改",
+        "description": "根据指定集数与某集剧本进行审核修改，输出分级issues与修改后的成品分镜。",
+        "category": "short_drama",
+        "api_path": "short-drama/edit-episode",
+        "result_key": None,
+        "prompt_version": "v1",
+        "temperature": 0.7,
+        "priority": 80,
+        "timeout": 240,
+        "max_tokens": 12000,
+        "script_id_field": "script_id",
+    },
+
     # ========= Step 1 大纲 =========
     "generate_outline": {
         "name": "AI 生成大纲",
@@ -220,6 +261,138 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 【额外要求】{extra_requirement}
 【指定集数】{specified_episodes}
 【某集剧本内容】{episode_script}""",
+    },
+
+    "short-drama-half-outline": {
+        "system_prompt": """你是一位短剧剧本解析专家。请把用户提供的原始小说/剧本/故事文本重构为「短剧半套大纲」（6个模块），作为后续分镜剧本生成的完整参数源。
+
+【工作流程】
+1. 提取核心要素：核心冲突、关键人物（最多5个核心角色）、高潮节点（2-3个重大反转）、结局方向
+2. 根据故事体量确定集数（每集约90秒，以目标参数单集时长为准）：
+   - 短篇（5000字内）→ 3-5集
+   - 中篇（5000-15000字）→ 6-10集
+   - 长篇（15000字以上）→ 截取核心段落10-15集
+   - 当目标集数为「自由发挥」时按此规则自行决定；当给出固定集数时优先遵守固定集数，但内容不足可截取核心段落
+3. 输出6模块半套大纲
+
+【输出】严格JSON对象，不要任何解释/Markdown/代码块：
+{
+  "detected": {
+    "themes": ["题材标签"],
+    "plots": ["剧情标签"],
+    "emotions": ["情绪标签"],
+    "time": "时间背景",
+    "style": "爽文短剧/悬疑推理/甜宠治愈/古风权谋/..."
+  },
+  "outline": [6个模块，按顺序：m1基础信息 / m2故事梗概 / m3人物设定 / m4核心冲突 / m5剧情走向 / m6分集目录],
+  "characters": [角色数组],
+  "episodes": [
+    {"id":1, "title":"集标题", "hook":"本集开场钩子/断章"}
+  ],
+  "warnings": ["识别到的不确定/缺失/做了较大改编的地方"]
+}
+
+【6个模块的字段规格】
+- m1 基础信息：{"id":"m1","type":"basic","title":"基础信息","badge":"基础信息","summary":"一句话","content":"正文", "meta":{"genre":"题材类型","episodes":预计集数数字,"duration":每集秒数,"audience":"目标受众","selling_point":"核心卖点"}}
+- m2 故事梗概：{"id":"m2","type":"synopsis","title":"故事梗概","badge":"故事梗概","summary":"一句话","content":"200字内：主角是谁/想要什么/遇到什么阻碍/最终如何"}
+- m3 人物设定：{"id":"m3","type":"character","title":"人物设定","badge":"人物设定","summary":"一句话","content":"主角+配角/反派的人物设定文字（姓名/年龄/性格标签/外在目标/内在缺陷/人物弧光/说话风格）"}
+- m4 核心冲突：{"id":"m4","type":"conflict","title":"核心冲突","badge":"核心冲突","summary":"一句话","content":"外部冲突与内部冲突的说明","external":"外部冲突","internal":"内部冲突"}
+- m5 剧情走向：{"id":"m5","type":"plot","title":"剧情走向","badge":"剧情走向","summary":"一句话","content":"分卷结构说明","volumes":[{"range":"1-X","hook":"卷末钩子","summary":"卷内主线"}]}
+- m6 分集目录：{"id":"m6","type":"episodes","title":"分集目录","badge":"分集目录","summary":"一句话","content":"分集目录说明","episodes":[{"id":集数数字,"title":"核心事件/集标题","hook":"开场钩子","event":"核心事件","cliff":"结尾悬念","emotion_start":"情绪起点","emotion_end":"情绪终点","intensity":强度1-10数字,"scene":"时间/场景","foreshadow":"伏笔动作","hook_type":"钩子类型"}]}
+
+【characters 数组规格】每个角色：
+{"id":"cX","name":"姓名","gender":"男/女","age":数字,"role":"男主/女主/反派/重要配角/功能性角色","tags":["标签"],"appearance":{"height":数字,"faceShape":"脸型","eyeShape":"眼型","noseShape":"鼻型","lipShape":"唇型","skinTone":"肤色","bodyShape":"体型","mark":["标志特征"],"reasons":{"height":"推荐理由","faceShape":"推荐理由","eyeShape":"推荐理由","noseShape":"推荐理由","lipShape":"推荐理由","skinTone":"推荐理由","bodyShape":"推荐理由","mark":"推荐理由"}},"personality":"性格关键词","background":"背景前史","tagline":"口头禅/金句","motivation":"核心动机","arc":"人物弧光","relations":"关系网","description":"详细描述","voice":"台词风格"}
+
+【episodes 数组】直接来自 m6 的 episodes，每条取 {id,title,hook}（其中 title 用核心事件，hook 用开场钩子）。
+
+【注意】
+- 必须严格按照指定情绪基调(tone)改写：爽感化=加爽点节奏+强化反转；悬疑化=加伏笔+留白+反转；甜宠化=强化男女主互动+减少虐点；保持原味=尽量保留原文情节与文风
+- 每集独立可看，情绪曲线有起伏（不连续30秒维持同一情绪）
+- 第5集结尾（付费转化点）钩子强度≥9/10
+- 保留原文关键剧情节点，不要乱加原创剧情（除非原文明显不足支撑集数）
+- characters 每个角色都必须给出 gender（男/女）、age（数字）和完整 appearance 对象（含 reasons 每个维度一句推荐理由），不能留空或省略；原文缺失时按角色定位合理推断填充""",
+        "user_prompt_template": """请解析以下原始文本并生成结构化半套大纲：
+
+【原文】
+{text}
+
+【目标参数】
+- 目标集数：{episodes_hint}
+- 单集时长：{ep_duration}秒
+- 情绪基调：{tone}
+- 文件名（参考）：{file_name}""",
+    },
+
+    "short-drama-full-script": {
+        "system_prompt": """你是一位顶级短剧分镜编剧，负责把故事文本或半套大纲转化为可直接拍摄的抖音竖屏短剧分镜剧本（四层结构：storyboards → cameras → behaviors）。
+
+【输出】严格JSON对象，不要任何解释/Markdown/代码块：
+{
+  "episodes": [
+    {
+      "id": 集号数字,
+      "title": "本集标题（有悬念感）",
+      "duration": 总秒数,
+      "storyboards": [
+        {
+          "id": "s1",
+          "title": "分镜标题",
+          "duration": 秒数,
+          "cameras": [
+            {
+              "id": "s1-c1",
+              "shotType": "远景/全景/中景/近景/特写",
+              "camMove": "推/拉/摇/移/跟/固定/升降",
+              "cutReason": "剪辑理由",
+              "duration": 秒数,
+              "behaviors": [
+                {"id":"s1-c1-b1","duration":秒,"location":"场景","visual":"画面描述","character":"角色id","action":"动作","dialog":"台词","dialogTag":"lip/voicover/os/narrator","emotion":"情绪"}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+【约束】
+- storyboards.cameras.behaviors.duration 逐层累加守恒
+- 每集约5-7个storyboards，每个storyboard含1-2个cameras，每个camera含1-2个behaviors
+- 对白必须标注dialogTag：lip/voicover/os/narrator
+- 每集结尾最后一个behavior必须是钩子/悬念
+- 人物必须来自输入的角色表/大纲，不创造未定义角色""",
+        "user_prompt_template": """请生成短剧分镜剧本：
+
+【故事文本/补充要求】
+{text}
+
+【已有大纲（可能为空）】
+{outline_json}
+
+【目标集数】{episodes_hint}
+【单集时长】{ep_duration}秒""",
+    },
+
+    "short-drama-edit-episode": {
+        "system_prompt": """你是一位短剧分镜审核修改专家。根据指定集数与某集剧本进行审核修改，输出分级issues与修改后的成品分镜。
+
+【输出】严格JSON对象：
+{
+  "episode": 修改后的完整episode对象（结构同分镜剧本的episode，id/title/duration尽量保持）,
+  "issues": [
+    {"id":"iss_X","priority":"T0|T1|T2","type":"plot|logic|character|continuity|timing|shooting|hook|compliance","target":{"si":0,"ci":0,"bi":0},"text":"问题","suggestion":"建议"}
+  ],
+  "resolved_issue_ids": ["iss_X"]
+}
+
+注意：只修改存在问题的行为单元，保持时间守恒；风控违规（枪支/血腥/性暗示/过度暴力）必给T0并改写。""",
+        "user_prompt_template": """请审核修改以下指定集分镜：
+
+【指定集数】{specified_episodes}
+【某集剧本】{episode_script}
+
+【故事文本（可能为空）】{story_text}""",
     },
 
     "generate_outline": {

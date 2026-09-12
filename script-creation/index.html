@@ -4418,16 +4418,18 @@ input[type="checkbox"] {
   function getCharAppearance(charId) {
     const c = characterData.find(x => x.id === charId);
     if (!c) return {};
-    if (!c.appearance) {
+    if (!c.appearance || typeof c.appearance !== 'object' || Array.isArray(c.appearance)) {
       c.appearance = {};
-      appearanceDimensions.forEach(d => {
-        if (d.type === 'multi') {
-          c.appearance[d.key] = (d.defaults[charId] || []).slice();
-        } else {
-          c.appearance[d.key] = d.defaults[charId] != null ? d.defaults[charId] : d.options[0];
-        }
-      });
     }
+    appearanceDimensions.forEach(d => {
+      if (d.type === 'multi') {
+        if (!Array.isArray(c.appearance[d.key]) || c.appearance[d.key].length === 0) {
+          c.appearance[d.key] = (d.defaults[charId] || []).slice();
+        }
+      } else if (c.appearance[d.key] == null || c.appearance[d.key] === '') {
+        c.appearance[d.key] = d.defaults[charId] != null ? d.defaults[charId] : d.options[0];
+      }
+    });
     return c.appearance;
   }
 

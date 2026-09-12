@@ -585,7 +585,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
         "system_prompt": """你是一位剧本解析专家。请从用户提供的原始小说/剧本/故事文本中，识别并结构化提取：
 
 1. 题材风格（theme/plot/emotion/time）
-2. 人物列表（主角/反派/重要配角，含性格/动机/关系）
+2. 人物列表（主角/反派/重要配角，含性格/动机/关系，且每个角色都必须给出 gender、age 和完整的 appearance 外形对象）
 3. 16模块大纲（同 generate_outline 规格）
 4. 分集骨架（按目标集数划分，每集给title+hook，不展开分镜）
 
@@ -599,7 +599,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
     "style": "爽文短剧/悬疑推理/甜宠治愈/古风权谋/..."
   },
   "outline": [16个大纲模块数组，结构同generate_outline],
-  "characters": [角色数组，结构同generate_characters],
+  "characters": [角色数组，结构同generate_characters，每个角色字段：{"id":"c1","name":"姓名","gender":"男/女","age":数字,"role":"男主/女主/反派/重要配角/功能性角色","appearance":{"height":数字,"faceShape":"脸型","eyeShape":"眼型","noseShape":"鼻型","lipShape":"唇型","skinTone":"肤色","bodyShape":"体型","mark":["标志特征"]},"personality":"性格关键词","background":"背景前史","goal":"核心诉求","arc":"人物弧光","voice":"台词风格","relationships":[{"targetId":"cX","type":"关系类型","description":"关系描述"}]}]],
   "episodes": [
     {"id":1, "title":"集标题","hook":"本集钩子/断章"}
   ],
@@ -609,7 +609,8 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 【注意】
 - 必须严格按照指定情绪基调(tone)改写：爽感化=加爽点节奏+强化反转；悬疑化=加伏笔+留白+反转；甜宠化=强化男女主互动+减少虐点；保持原味=尽量保留原文情节与文风
 - episodes数组长度必须严格等于目标集数
-- 保留原文关键剧情节点，不要乱加原创剧情（除非原文明显不足支撑集数）""",
+- 保留原文关键剧情节点，不要乱加原创剧情（除非原文明显不足支撑集数）
+- characters 数组中每个角色都必须给出 gender（男/女）、age（数字）和完整 appearance 对象（含 height/faceShape/eyeShape/noseShape/lipShape/skinTone/bodyShape/mark），不能留空或省略；原文缺失时按角色定位合理推断填充""",
         "user_prompt_template": """请解析以下原始文本并生成结构化剧本：
 
 【原文】

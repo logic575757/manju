@@ -1,5 +1,6 @@
 import copy
 import random
+import re
 import time
 from typing import Any, Dict, List, Optional, AsyncGenerator
 
@@ -601,6 +602,285 @@ def _resize_half_outline(outline, episodes, count):
     return outline, new_episodes
 
 
+_SURNAME_CHARS = (
+    "王李张刘陈杨赵黄周吴徐孙马朱胡郭何高林罗郑梁谢宋唐许韩冯邓曹彭曾肖田董袁"
+    "潘于蒋蔡余杜叶程苏魏吕丁任沈姚卢姜崔钟谭陆汪范金石廖贾夏韦傅方白邹孟熊秦邱"
+    "江尹薛闫段雷侯龙史陶黎贺顾毛郝龚邵万钱严覃武戴莫孔向汤"
+)
+
+_GENRE_RULES = [
+    ("科幻", ["科幻", "太空", "星际", "外星", "机器人", "人工智能", "飞船", "宇宙", "实验室", "克隆", "基因", "赛博", "末日", "未来", "海底", "月球", "火星"]),
+    ("悬疑", ["悬疑", "谜案", "失踪", "真相", "秘密", "阴谋", "调查", "线索", "凶手", "尸体", "失忆", "记忆", "推理", "破案"]),
+    ("惊悚", ["惊悚", "恐怖", "鬼", "灵异", "诡异", "咒怨", "地下室", "黑暗", "尖叫"]),
+    ("都市", ["都市", "职场", "公司", "总裁", "城市", "白领", "创业者", "出租屋", "写字楼"]),
+    ("豪门", ["豪门", "总裁", "继承", "集团", "董事", "千金", "少爷", "财阀", "家族"]),
+    ("复仇", ["复仇", "报仇", "血债", "背叛", "陷害", "夺回", "报仇雪恨"]),
+    ("甜宠", ["甜宠", "恋爱", "萌宝", "带娃", "婚后", "撒糖"]),
+    ("重生", ["重生", "穿越", "回到", "前世", "再来一次", "转世"]),
+    ("古代", ["古代", "王爷", "侯府", "嫡女", "庶女", "京城", "太子", "穿越古代", "宫廷"]),
+    ("校园", ["校园", "高中", "大学", "老师", "学生", "同桌", "青春", "毕业"]),
+    ("武侠", ["武侠", "江湖", "门派", "剑客", "侠客", "武林", "秘籍"]),
+    ("修仙", ["修仙", "仙侠", "修士", "灵气", "渡劫", "飞升", "宗门", "法宝"]),
+    ("谍战", ["谍战", "特工", "间谍", "卧底", "情报", "密码", "潜伏"]),
+    ("年代", ["年代", "知青", "改革开放", "八十年代", "九十年代", "工厂", "下乡"]),
+    ("奇幻", ["奇幻", "魔法", "异世界", "精灵", "王国", "咒语", "勇者"]),
+    ("灾难", ["灾难", "地震", "海啸", "病毒", "丧尸", "求生"]),
+]
+
+_GENRE_TIME = {
+    "科幻": "近未来", "悬疑": "现代都市", "惊悚": "现代都市", "都市": "现代都市",
+    "豪门": "现代都市", "复仇": "现代都市", "甜宠": "现代都市", "重生": "现代都市",
+    "古代": "古代", "校园": "现代校园", "武侠": "古代江湖", "修仙": "玄幻仙侠",
+    "谍战": "民国/现代", "年代": "年代背景", "奇幻": "异世界", "灾难": "近未来",
+}
+
+_GENRE_PLOTS = {
+    "科幻": ["科技阴谋", "真相追寻", "生存危机"],
+    "悬疑": ["线索推理", "真相揭露", "身份之谜"],
+    "惊悚": ["危机逃亡", "诡异事件", "生存压迫"],
+    "都市": ["事业逆袭", "情感纠葛", "成长蜕变"],
+    "豪门": ["家产争夺", "商战博弈", "身份逆袭"],
+    "复仇": ["复仇设局", "身份反击", "罪证揭露"],
+    "甜宠": ["先婚后爱", "甜蜜日常", "误会化解"],
+    "重生": ["重生翻盘", "先知先觉", "逆袭复仇"],
+    "古代": ["宅斗权谋", "身份逆袭", "家国大义"],
+    "校园": ["青春成长", "懵懂心动", "梦想拼搏"],
+    "武侠": ["江湖恩怨", "侠义情仇", "秘籍争夺"],
+    "修仙": ["宗门历练", "境界突破", "仙魔之争"],
+    "谍战": ["潜伏卧底", "情报交锋", "信仰抉择"],
+    "年代": ["时代浪潮", "命运沉浮", "奋斗创业"],
+    "奇幻": ["异世冒险", "魔法成长", "王国危机"],
+    "灾难": ["灾难逃生", "绝境求生", "人性抉择"],
+}
+
+_GENRE_EMOTIONS = {
+    "科幻": ["未知", "震撼", "紧迫"],
+    "悬疑": ["紧张", "疑惑", "恍然大悟"],
+    "惊悚": ["恐惧", "压迫", "解脱"],
+    "都市": ["爽感", "共鸣", "治愈"],
+    "豪门": ["爽感", "虐心", "过瘾"],
+    "复仇": ["爽感", "虐心", "痛快"],
+    "甜宠": ["甜蜜", "心动", "治愈"],
+    "重生": ["爽感", "虐心", "痛快"],
+    "古代": ["爽感", "虐心", "家国情怀"],
+    "校园": ["青春", "心动", "治愈"],
+    "武侠": ["热血", "豪情", "虐心"],
+    "修仙": ["热血", "震撼", "爽感"],
+    "谍战": ["紧张", "悬疑", "热血"],
+    "年代": ["怀旧", "奋斗", "感动"],
+    "奇幻": ["奇幻", "冒险", "震撼"],
+    "灾难": ["紧张", "震撼", "感动"],
+}
+
+_COMMON_TAIL_WORDS = {
+    "完全", "一起", "一切", "一个", "一段", "一定", "一些", "一下", "已经",
+    "非常", "特别", "因为", "所以", "但是", "可是", "如果", "然后", "还是", "只是",
+    "这个", "那个", "什么", "怎么", "时候", "地方", "现在", "后来", "突然",
+    "终于", "自己", "他们", "我们", "你们", "知道", "觉得", "发现", "看到",
+    "开始", "最后", "以前", "以后", "名字", "曾经", "竟然", "果然", "当然",
+}
+
+_FALLBACK_NAMES = ["林晚", "顾言", "苏念", "周行"]
+
+_BEAT_TITLES = ["开局", "悬念", "冲突", "反击", "高光", "反转", "危机", "真相", "抉择", "联手", "爆发", "终局"]
+
+
+def _extract_chinese_names(text: str, limit: int = 4) -> List[str]:
+    names: List[str] = []
+    seen = set()
+    stop_tails = set("的了是我你他她它这在有和就都不没于与或而及被把让向从到对给师员长")
+    pattern = re.compile(r"[%s][\u4e00-\u9fa5]{1,2}" % _SURNAME_CHARS)
+    for m in pattern.finditer(text or ""):
+        name = m.group(0)
+        if len(name) < 2 or name[-1] in stop_tails:
+            continue
+        if name in _COMMON_TAIL_WORDS or name[1:] in _COMMON_TAIL_WORDS:
+            continue
+        if name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+        if len(names) >= limit:
+            break
+    return names
+
+
+def _detect_short_drama_meta(text: str, tone: str) -> Dict[str, Any]:
+    genres: List[str] = []
+    for g, kws in _GENRE_RULES:
+        if any(kw in text for kw in kws):
+            genres.append(g)
+    if not genres:
+        genres = ["都市", "情感"]
+    genres = list(dict.fromkeys(genres))
+    primary = genres[0]
+    themes = genres[:4]
+
+    plots: List[str] = []
+    for g in themes:
+        for p in _GENRE_PLOTS.get(g, ["成长", "情感", "反转"]):
+            if p not in plots:
+                plots.append(p)
+            if len(plots) >= 4:
+                break
+        if len(plots) >= 4:
+            break
+
+    emotions: List[str] = []
+    for g in themes:
+        for e in _GENRE_EMOTIONS.get(g, ["爽感", "共鸣", "治愈"]):
+            if e not in emotions:
+                emotions.append(e)
+            if len(emotions) >= 4:
+                break
+        if len(emotions) >= 4:
+            break
+
+    time_bg = _GENRE_TIME.get(primary, "现代都市")
+    style = tone if tone and tone != "保持原作风味" else ("爽文短剧" if ("重生" in themes or "复仇" in themes) else "短剧")
+    return {
+        "primary": primary,
+        "themes": themes,
+        "plots": plots,
+        "emotions": emotions,
+        "time": time_bg,
+        "style": style,
+    }
+
+
+def _make_text_character(idx: int, name: str, role_label: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+    primary = meta["primary"]
+    themes = "、".join(meta["themes"])
+    plots = "、".join(meta["plots"])
+    gender = "女" if idx in (0, 3) else "男"
+    return {
+        "id": f"c{idx + 1}",
+        "name": name,
+        "gender": gender,
+        "age": 26 + idx,
+        "role": role_label,
+        "tags": meta["themes"][:3],
+        "appearance": {"gender": gender, "age": 26 + idx},
+        "personality": f"围绕「{primary}」题材设定的{role_label}，性格服务于「{plots}」的冲突推进。",
+        "background": f"由导入文本提取/推定的角色「{name}」，具体前史建议结合原文进一步细化。",
+        "tagline": f"在「{themes}」的故事里，{name}有自己的坚持。",
+        "arc": f"随「{themes}」主线推进，{name}完成从被动到主动的转变。",
+        "relations": "关系请依据原文补充",
+        "motivation": f"推动「{plots}」发展的核心动力之一。",
+        "description": f"{role_label}，承担「{primary}」主线的关键叙事功能。",
+    }
+
+
+def _build_text_half_outline(text: str, tone: str, ep_count: int):
+    meta = _detect_short_drama_meta(text, tone)
+    names = _extract_chinese_names(text)
+    protagonist = names[0] if names else _FALLBACK_NAMES[0]
+    cast = [names[i] if i < len(names) else _FALLBACK_NAMES[i] for i in range(4)]
+    snippet = (text[:36] + "…") if len(text) > 36 else (text or "未提供")
+    primary = meta["primary"]
+    themes = "、".join(meta["themes"])
+    plots = "、".join(meta["plots"])
+    emotions = "、".join(meta["emotions"])
+
+    episodes, m6_episodes = _make_text_episodes(meta, protagonist, ep_count)
+
+    outline = [
+        {
+            "id": "m1", "type": "basic", "title": "基础信息", "badge": "基础信息",
+            "summary": f"依据导入文本识别为「{primary}」题材，共{ep_count}集。",
+            "content": f"题材：{themes}；目标：{ep_count}集×90秒竖屏短剧；文本摘要：{snippet}。",
+            "meta": {
+                "genre": primary, "episodes": ep_count, "duration": 90,
+                "audience": "短剧目标观众", "selling_point": plots,
+            },
+        },
+        {
+            "id": "m2", "type": "synopsis", "title": "故事梗概", "badge": "故事梗概",
+            "summary": f"以「{primary}」为主线展开的{ep_count}集短剧。",
+            "content": f"依据导入文本识别主题为「{themes}」。故事围绕{protagonist}展开，核心情节为{plots}。原文节选：「{snippet}」",
+        },
+        {
+            "id": "m3", "type": "character", "title": "人物设定", "badge": "人物设定",
+            "summary": f"从文本中识别到主要角色：{'、'.join(cast)}。",
+            "content": "以下角色依据导入文本提取/推定，建议人工核对：\n" + "\n".join(
+                f"{i + 1}. {cast[i]}——{role}" for i, role in enumerate(["主角", "关键配角/盟友", "对手/阻力", "情感线角色"])
+            ),
+        },
+        {
+            "id": "m4", "type": "conflict", "title": "核心冲突", "badge": "核心冲突",
+            "summary": f"围绕「{plots.split('、')[0]}」构建外部冲突与人物内心挣扎。",
+            "content": f"外部冲突：主角在「{themes}」背景下与对手/阻力对抗；内部冲突：在{emotions}中完成情感与目标的选择。",
+            "external": f"主角 vs 对手（依据「{themes}」推断）",
+            "internal": f"目标达成 vs 内心情感（{emotions}）",
+        },
+        {
+            "id": "m5", "type": "plot", "title": "剧情走向", "badge": "剧情走向",
+            "summary": f"按{ep_count}集体量划分阶段，逐段推进。",
+            "content": f"依据文本主题「{themes}」拆分为起承转合，每段末留钩子，围绕{plots}层层展开。",
+            "volumes": _build_text_volumes(meta, ep_count),
+        },
+        {
+            "id": "m6", "type": "episodes", "title": "分集目录", "badge": "分集目录",
+            "summary": f"{ep_count}集分集目录（据文本主题自动生成标题，建议人工润色）。",
+            "content": "分集目录见 episodes 字段，供分镜生成逐集展开。",
+            "episodes": m6_episodes,
+        },
+    ]
+
+    characters = [
+        _make_text_character(0, cast[0], "主角", meta),
+        _make_text_character(1, cast[1], "关键配角/盟友", meta),
+        _make_text_character(2, cast[2], "对手/阻力", meta),
+        _make_text_character(3, cast[3], "情感线角色", meta),
+    ]
+
+    detected = {
+        "themes": meta["themes"],
+        "plots": meta["plots"],
+        "emotions": meta["emotions"],
+        "time": meta["time"],
+        "style": meta["style"],
+    }
+
+    return outline, episodes, characters, detected
+
+
+def _build_text_volumes(meta: Dict[str, Any], ep_count: int) -> List[Dict[str, str]]:
+    plots = meta["plots"]
+    primary = meta["primary"]
+    labels = [
+        (f"1-{max(1, ep_count // 4)}", "起", f"建立{primary}世界观并抛出{plots[0] if plots else '核心冲突'}"),
+        (f"{ep_count // 4 + 1}-{ep_count // 2}", "承", f"{plots[1] if len(plots) > 1 else '矛盾升级'}逐步展开"),
+        (f"{ep_count // 2 + 1}-{max(ep_count // 2 + 1, ep_count * 3 // 4)}", "转", f"{plots[2] if len(plots) > 2 else '真相/反转'}集中爆发"),
+        (f"{ep_count * 3 // 4 + 1}-{ep_count}", "合", "收束主线并给出结局"),
+    ]
+    return [{"range": rng, "hook": f"{primary}·{stage}关键钩子", "summary": summ} for rng, stage, summ in labels]
+
+
+def _make_text_episodes(meta: Dict[str, Any], protagonist: str, ep_count: int):
+    primary = meta["primary"]
+    plots = meta["plots"]
+    episodes = []
+    m6_episodes = []
+    for i in range(1, ep_count + 1):
+        beat = _BEAT_TITLES[(i - 1) % len(_BEAT_TITLES)]
+        title = f"第{i}集·{primary}{beat}"
+        hook = f"{protagonist}在「{plots[0] if plots else primary}」中迎来{beat}，推动剧情进入下一阶段。"
+        m6_episodes.append({
+            "id": i, "title": title, "hook": hook,
+            "event": f"第{i}集核心事件：{hook}",
+            "cliff": f"第{i}集结尾悬念：{hook}",
+            "emotion_start": meta["emotions"][0],
+            "emotion_end": "悬念",
+            "intensity": 9 if i >= max(1, ep_count - 3) else 6,
+            "scene": f"{meta['time']} 日/夜",
+            "foreshadow": f"第{i}集为后续「{plots[1] if len(plots) > 1 else plots[0]}」埋设伏笔。",
+            "hook_type": "反转" if i % 3 == 0 else "悬念",
+        })
+        episodes.append({"id": i, "title": title, "hook": hook})
+    return episodes, m6_episodes
+
+
 class MockProvider:
     name = "mock"
     model_name = "mock-v1"
@@ -913,23 +1193,25 @@ class MockProvider:
         yield sse_event("phase", {"phase": "parsing", "message": f"正在解析文本并生成{ep_count}集半套大纲..."})
         await asyncio.sleep(0.6)
 
-        outline, episodes = _build_half_outline()
-        if ep_count != 20:
-            outline, episodes = _resize_half_outline(outline, episodes, ep_count)
-
-        characters = copy.deepcopy(MOCK_CHARACTERS[:4])
-        characters = _attach_appearance_reasons(characters)
-
-        text_snippet = (text[:20] + "…") if len(text) > 20 else (text or file_name or "未提供")
-        style = tone if tone != "保持原作风味" else "爽文短剧"
-        result = {
-            "detected": {
+        if text:
+            outline, episodes, characters, detected = _build_text_half_outline(text, tone, ep_count)
+        else:
+            outline, episodes = _build_half_outline()
+            if ep_count != 20:
+                outline, episodes = _resize_half_outline(outline, episodes, ep_count)
+            characters = copy.deepcopy(MOCK_CHARACTERS[:4])
+            characters = _attach_appearance_reasons(characters)
+            detected = {
                 "themes": ["豪门", "复仇", "重生"],
                 "plots": ["复仇夺产", "甜宠", "商战"],
                 "emotions": ["爽感", "虐心", "甜宠"],
                 "time": "现代都市",
-                "style": style,
-            },
+                "style": tone if tone != "保持原作风味" else "爽文短剧",
+            }
+
+        text_snippet = (text[:20] + "…") if len(text) > 20 else (text or file_name or "未提供")
+        result = {
+            "detected": detected,
             "outline": outline,
             "characters": characters,
             "episodes": episodes,

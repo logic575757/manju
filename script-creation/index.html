@@ -4387,12 +4387,6 @@ input[type="checkbox"] {
   // ========== 外貌特征维度库 ==========
   // type: 'radio' 单选标签 | 'slider' 滑条 | 'multi' 多选标签
   const appearanceDimensions = [
-    { key:'gender', label:'性别', type:'radio',
-      options:['女','男'],
-      defaults:{ c1:'女', c2:'男', c3:'女' } },
-    { key:'age', label:'年龄', type:'slider',
-      min:15, max:60, step:1, unit:'岁',
-      defaults:{ c1:24, c2:28, c3:22 } },
     { key:'height', label:'身高', type:'slider',
       min:150, max:195, step:1, unit:'cm',
       defaults:{ c1:168, c2:185, c3:170 } },
@@ -4480,7 +4474,9 @@ input[type="checkbox"] {
     }
     if (dim.type === 'multi') {
       const sel = Array.isArray(curVal) ? curVal : [];
-      const chips = dim.options.map(opt => {
+      const effOptions = dim.options.slice();
+      sel.forEach(v => { if (v != null && v !== '' && effOptions.indexOf(v) === -1) effOptions.push(v); });
+      const chips = effOptions.map(opt => {
         const on = sel.indexOf(opt) !== -1;
         return `<span class="app-opt multi ${on ? 'selected' : ''}" onclick="toggleMultiMark('${dim.key}','${escapeJsAttr(opt)}')">${opt}</span>`;
       }).join('');
@@ -4494,7 +4490,9 @@ input[type="checkbox"] {
         </div>`;
     }
     // radio
-    const chips = dim.options.map(opt => {
+    const effOptions = dim.options.slice();
+    if (curVal != null && curVal !== '' && effOptions.indexOf(curVal) === -1) effOptions.push(curVal);
+    const chips = effOptions.map(opt => {
       const on = opt === curVal;
       return `<span class="app-opt ${on ? 'selected' : ''}" onclick="pickAppearanceOption('${dim.key}','${escapeJsAttr(opt)}')">${opt}</span>`;
     }).join('');

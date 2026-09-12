@@ -276,6 +276,12 @@ const ApiClient = (() => {
         body: { text, file_name: file_name || '', episodes: episodes || 20, episodes_free: !!episodes_free, ep_duration: ep_duration || 90, tone: tone || '保持原作风味', script_id: scriptId || null },
       });
     },
+    dispatchShortDrama(scriptId, params) {
+      return request('/api/ai/dispatch/short-drama', {
+        method: 'POST',
+        body: { script_id: scriptId, ...(params || {}) },
+      });
+    },
   };
 
   /* ============== AI 任务（队列轮询 / 管理） ============== */

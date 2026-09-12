@@ -476,11 +476,104 @@ MOCK_REVIEW_ISSUES = [
 ]
 
 
+_EP_TITLES = {
+    1: ("重生归来·血仇立誓", "破旧庄子醒来，立誓护子报仇"),
+    2: ("萌宝相认·母子连心", "福伯秘密带念念来见，母子相认"),
+    3: ("化名入职·步步为营", "苏晴入职顾氏，电梯里与顾言擦肩"),
+    4: ("宴会风云·初露锋芒", "酒会上识破合同陷阱，惊艳全场"),
+    5: ("律师登场·暗流涌动", "陆沉渊法庭碾压，走廊第一次对视"),
+    6: ("秘密同盟·利益交换", "陆沉渊出示遗嘱，两人结盟"),
+    7: ("南城地块·前世情报", "苏晴凭前世记忆提出精准方案"),
+    8: ("白莲疑心·试探身份", "苏梦瑶百般试探苏晴"),
+    9: ("商战胜局·一鸣惊人", "南城竞标完胜，顾言邀舞"),
+    10: ("幼儿园惊魂·父子擦肩", "亲子日顾言出席，陆沉渊解围"),
+    11: ("顾言追求·危险靠近", "顾言开始追求苏晴"),
+    12: ("雨夜告白·沉渊吃醋", "陆沉渊雨夜等她一整夜"),
+    13: ("梦瑶设局·身份险露", "DNA样本被福伯偷换"),
+    14: ("车祸相救·沉渊受伤", "陆沉渊为救苏晚晴重伤"),
+    15: ("母亲遗信·真相初现", "母亲遗信揭露更大阴谋"),
+    16: ("公开身份·全场震动", "股东大会上苏晚晴现身"),
+    17: ("法庭交锋·证据为王", "陆沉渊法庭出示关键证据链"),
+    18: ("白莲反水·罪证曝光", "苏梦瑶交出录音和伪证证据"),
+    19: ("顾氏崩塌·恶人落网", "顾言被捕，苏晚晴夺回苏氏"),
+    20: ("涅槃重生·携手余生", "海边求婚，一家三口圆满"),
+}
+
+
+def _build_half_outline():
+    m6_episodes = []
+    episodes = []
+    for ep_idx in range(1, 21):
+        title, hook = _EP_TITLES.get(ep_idx, (f"第{ep_idx}集", "剧情推进"))
+        m6_episodes.append({
+            "id": ep_idx,
+            "title": title,
+            "hook": hook,
+            "event": f"第{ep_idx}集核心事件：{hook}",
+            "cliff": f"第{ep_idx}集结尾悬念：{hook}",
+            "emotion_start": "压迫" if ep_idx <= 3 else "紧张",
+            "emotion_end": "悬念",
+            "intensity": 9 if ep_idx >= 5 else 6,
+            "scene": "现代都市 日/夜",
+            "foreshadow": f"第{ep_idx}集埋设伏笔动作",
+            "hook_type": "反转" if ep_idx % 3 == 0 else "悬念",
+        })
+        episodes.append({"id": ep_idx, "title": title, "hook": hook})
+
+    outline = [
+        {
+            "id": "m1", "type": "basic", "title": "基础信息", "badge": "基础信息",
+            "summary": "女主重生归来，携子复仇，夺回家产。",
+            "content": "题材：豪门复仇/萌宝/甜宠；目标：20集×90秒竖屏短剧。",
+            "meta": {
+                "genre": "豪门复仇", "episodes": 20, "duration": 90,
+                "audience": "25-45岁女性观众", "selling_point": "重生复仇+萌宝助攻+豪门商战+甜宠反转",
+            },
+        },
+        {
+            "id": "m2", "type": "synopsis", "title": "故事梗概", "badge": "故事梗概",
+            "summary": "重生复仇女王携萌宝手撕渣男白莲花。",
+            "content": "五年前被陷害坠海身亡的苏晚晴重生回到坠海前三天，携天才萌宝化名潜入前夫顾言的集团，利用前世记忆步步设局，手撕白莲花堂妹，夺回母亲遗产，揭露顾家罪证，最终与守护她的律师陆沉渊走到一起。",
+        },
+        {
+            "id": "m3", "type": "character", "title": "人物设定", "badge": "人物设定",
+            "summary": "女主苏晚晴、男主陆沉渊、反派顾言/苏梦瑶、萌宝念念。",
+            "content": "苏晚晴：重生复仇女王，冷静腹黑；陆沉渊：冷面律师，外冷内热；顾言：伪君子前夫；苏梦瑶：白莲花堂妹；顾念念：天才萌宝；福伯：忠心老管家。",
+        },
+        {
+            "id": "m4", "type": "conflict", "title": "核心冲突", "badge": "核心冲突",
+            "summary": "复仇夺产与情感救赎的双线冲突。",
+            "content": "外部冲突：苏晚晴对抗顾氏集团；内部冲突：从复仇执念到重新学会信任与爱。",
+            "external": "苏晚晴 vs 顾言/苏梦瑶/顾氏集团，夺回苏氏、揭露罪证",
+            "internal": "复仇执念 vs 重新学会信任与爱",
+        },
+        {
+            "id": "m5", "type": "plot", "title": "剧情走向", "badge": "剧情走向",
+            "summary": "四卷推进：重生归来→初露锋芒→甜虐交织→终极翻盘。",
+            "content": "四卷结构，每卷末留钩子，第5集付费转化点钩子强度拉满。",
+            "volumes": [
+                {"range": "1-5", "hook": "顾言在顾氏电梯与苏晴擦肩未认出", "summary": "重生归来，救子化名潜入顾氏"},
+                {"range": "6-10", "hook": "顾念念幼儿园活动上顾言出席", "summary": "初露锋芒，商战首胜，与陆沉渊结盟"},
+                {"range": "11-15", "hook": "女主发现母亲死因另有隐情", "summary": "甜虐交织，身份危机，真相初现"},
+                {"range": "16-20", "hook": "苏晚晴当众公开身份", "summary": "终极翻盘，法庭对决，圆满结局"},
+            ],
+        },
+        {
+            "id": "m6", "type": "episodes", "title": "分集目录", "badge": "分集目录",
+            "summary": "20集分集目录，每集含钩子与悬念。",
+            "content": "分集目录见 episodes 字段，供分镜生成逐集展开。",
+            "episodes": m6_episodes,
+        },
+    ]
+    return outline, episodes
+
+
 class MockProvider:
     name = "mock"
     model_name = "mock-v1"
 
     _LEGACY_METHODS = {
+        "dispatch_short_drama": "dispatch_short_drama",
         "generate_outline": "generate_outline",
         "review_outline": "review_outline",
         "modify_outline_module": "modify_module",
@@ -689,42 +782,89 @@ class MockProvider:
         yield sse_event("result", {"candidates": candidates})
         yield sse_done({"candidates": candidates})
 
+    async def dispatch_short_drama(self, req: dict) -> AsyncGenerator[str, None]:
+        import asyncio
+        yield sse_event("phase", {"phase": "dispatching", "message": "正在判断执行路径..."})
+        await asyncio.sleep(0.4)
+
+        story = (req.get("story_text") or "").strip()
+        has_outline = bool(req.get("has_outline"))
+        intent = (req.get("user_intent") or "").strip()
+        specified = req.get("specified_episodes")
+        episode_script = (req.get("episode_script") or "").strip()
+
+        if specified and episode_script and not story:
+            result = {
+                "route": "edit_episode",
+                "skill": "short-drama-edit-episode",
+                "reason": "提供了指定集数与某集剧本，且无故事文本，进入分镜审核修改。",
+                "question": "",
+                "options": [],
+            }
+        elif story and not has_outline:
+            if "大纲" in intent:
+                result = {
+                    "route": "half_outline",
+                    "skill": "short-drama-half-outline",
+                    "reason": "用户提供了故事文本并明确要大纲。",
+                    "question": "",
+                    "options": [],
+                }
+            elif "剧本" in intent:
+                result = {
+                    "route": "full_script",
+                    "skill": "short-drama-full-script",
+                    "reason": "用户提供了故事文本并明确要分镜剧本。",
+                    "question": "",
+                    "options": [],
+                }
+            else:
+                result = {
+                    "route": "ask",
+                    "skill": None,
+                    "reason": "缺少明确意图，需追问目标产物。",
+                    "question": "要半套大纲还是直接出分镜剧本？",
+                    "options": ["半套大纲", "分镜剧本"],
+                }
+        else:
+            result = {
+                "route": "ask",
+                "skill": None,
+                "reason": "素材不足，无法判断执行路径。",
+                "question": "请提供故事文本，或指定要修改的集数+剧本内容。",
+                "options": ["提供故事文本", "指定集数+剧本"],
+            }
+
+        yield sse_event("result", result)
+        yield sse_done(result)
+
     async def parse_import(self, req: dict) -> AsyncGenerator[str, None]:
         import asyncio
         file_name = req.get("file_name", "")
         yield sse_event("phase", {"phase": "parsing", "message": f"正在解析文件 {file_name}..."})
         await asyncio.sleep(0.6)
-        outline = copy.deepcopy(MOCK_OUTLINE)
+        outline, episodes = _build_half_outline()
         characters = copy.deepcopy(MOCK_CHARACTERS[:4])
         characters = _attach_appearance_reasons(characters)
-        yield sse_event("result", {"outline": outline, "characters": characters, "warnings": ["已自动推断20集结构，建议人工审核分集边界。"]})
-        yield sse_done({"outline": outline, "characters": characters})
+        result = {
+            "detected": {
+                "themes": ["豪门", "复仇", "重生"],
+                "plots": ["复仇夺产", "甜宠", "商战"],
+                "emotions": ["爽感", "虐心", "甜宠"],
+                "time": "现代都市",
+                "style": "爽文短剧",
+            },
+            "outline": outline,
+            "characters": characters,
+            "episodes": episodes,
+            "warnings": ["已自动推断20集结构，建议人工审核分集边界。"],
+        }
+        yield sse_event("result", result)
+        yield sse_done(result)
 
 
 def _get_episode_data(ep_idx: int, outline: list) -> dict:
-    ep_titles = {
-        1: ("重生归来·血仇立誓", "破旧庄子醒来，立誓护子报仇"),
-        2: ("萌宝相认·母子连心", "福伯秘密带念念来见，母子相认"),
-        3: ("化名入职·步步为营", "苏晴入职顾氏，电梯里与顾言擦肩"),
-        4: ("宴会风云·初露锋芒", "酒会上识破合同陷阱，惊艳全场"),
-        5: ("律师登场·暗流涌动", "陆沉渊法庭碾压，走廊第一次对视"),
-        6: ("秘密同盟·利益交换", "陆沉渊出示遗嘱，两人结盟"),
-        7: ("南城地块·前世情报", "苏晴凭前世记忆提出精准方案"),
-        8: ("白莲疑心·试探身份", "苏梦瑶百般试探苏晴"),
-        9: ("商战胜局·一鸣惊人", "南城竞标完胜，顾言邀舞"),
-        10: ("幼儿园惊魂·父子擦肩", "亲子日顾言出席，陆沉渊解围"),
-        11: ("顾言追求·危险靠近", "顾言开始追求苏晴"),
-        12: ("雨夜告白·沉渊吃醋", "陆沉渊雨夜等她一整夜"),
-        13: ("梦瑶设局·身份险露", "DNA样本被福伯偷换"),
-        14: ("车祸相救·沉渊受伤", "陆沉渊为救苏晚晴重伤"),
-        15: ("母亲遗信·真相初现", "母亲遗信揭露更大阴谋"),
-        16: ("公开身份·全场震动", "股东大会上苏晚晴现身"),
-        17: ("法庭交锋·证据为王", "陆沉渊法庭出示关键证据链"),
-        18: ("白莲反水·罪证曝光", "苏梦瑶交出录音和伪证证据"),
-        19: ("顾氏崩塌·恶人落网", "顾言被捕，苏晚晴夺回苏氏"),
-        20: ("涅槃重生·携手余生", "海边求婚，一家三口圆满"),
-    }
-    title, hook = ep_titles.get(ep_idx, (f"第{ep_idx}集", "剧情推进"))
+    title, hook = _EP_TITLES.get(ep_idx, (f"第{ep_idx}集", "剧情推进"))
     return _make_episode(ep_idx, title, hook, hook)
 
 

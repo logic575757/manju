@@ -12,6 +12,21 @@ from typing import Dict, Any
 
 
 BUILTIN_SKILLS: Dict[str, Dict[str, Any]] = {
+    # ========= 入口调度 =========
+    "dispatch_short_drama": {
+        "name": "短剧 Skill 调度器",
+        "description": "入口：根据故事文本/大纲/指定集数判断路由到 半套大纲 / 分镜剧本 / 分镜审核修改，或追问缺失素材。只判断不创作。",
+        "category": "dispatch",
+        "api_path": "dispatch/short-drama",
+        "result_key": None,
+        "prompt_version": "v1",
+        "temperature": 0.2,
+        "priority": 150,
+        "timeout": 60,
+        "max_tokens": 1024,
+        "script_id_field": "script_id",
+    },
+
     # ========= Step 1 大纲 =========
     "generate_outline": {
         "name": "AI 生成大纲",
@@ -169,6 +184,44 @@ BUILTIN_SKILLS: Dict[str, Dict[str, Any]] = {
 # Prompt 模板（system_prompt / user_prompt_template）
 # 使用 {{var}} 风格占位符，渲染时由 _render_prompt 替换。
 BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
+    "dispatch_short_drama": {
+        "system_prompt": """你是一位短剧 Skill 调度器，负责在一条线路内根据用户输入判断调用哪个执行 skill。你只判断和调度，不做任何创作。
+
+【可派发的执行 skill】
+- short-drama-half-outline：给定故事文本 → 生成半套大纲（6模块）
+- short-drama-full-script：给定故事/大纲 → 生成分镜剧本
+- short-drama-edit-episode：给定集数+某集剧本 → 审核修改成品
+
+【调度逻辑】
+1. 用户有「故事文本」且无「大纲」且无「额外要求」：
+   - 明确要「大纲」→ route="half_outline"
+   - 明确要「剧本」→ route="full_script"
+   - 未说明 → route="ask"，追问"要半套大纲还是直接出分镜剧本？"
+2. 用户有「指定集数」且「某集剧本」且无「故事」→ route="edit_episode"
+3. 缺素材无法判断 → route="ask"，追问"请提供故事文本，或指定要修改的集数+剧本内容"
+
+【输出】严格JSON对象，不要任何解释/Markdown/代码块：
+{
+  "route": "half_outline" | "full_script" | "edit_episode" | "ask",
+  "skill": "short-drama-half-outline" | "short-drama-full-script" | "short-drama-edit-episode" | null,
+  "reason": "一句话路由理由",
+  "question": "追问问题（route=ask 时必填，否则空字符串）",
+  "options": ["追问时的可选选项", "..."],
+}
+
+注意：route=ask 时 skill 必须为 null，question 必须给明确问题，options 给出简洁可选项。""",
+        "user_prompt_template": """请判断以下用户输入应路由到哪个执行 skill：
+
+【故事文本】
+{story_text}
+
+【是否已有大纲】{has_outline}
+【用户意图（大纲/剧本/空）】{user_intent}
+【额外要求】{extra_requirement}
+【指定集数】{specified_episodes}
+【某集剧本内容】{episode_script}""",
+    },
+
     "generate_outline": {
         "system_prompt": """你是一位顶级短剧总编剧，精通男频/女频爽文短剧的节奏设计、钩子布局和反转结构。你输出的短剧大纲会被直接用于工业化分镜生产，必须结构严谨、爽点密集、钩子强、每集结尾都有断章。
 
@@ -401,17 +454,35 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
     },
 
     "generate_episode": {
-        "system_prompt": """你是一位顶级分镜编剧，擅长把大纲转化为精确到秒、可直接拍摄的短剧分镜脚本。
+        "system_prompt": """你是一位顶级分镜编剧，擅长把大纲转化为精确到秒、可直接拍摄的抖音竖屏短剧分镜脚本。
 
 【核心约束】（违反任何一条都算失败）
 1. 总时长必须 ≈ epDuration，误差不超过 ±5%
 2. 四层嵌套时间守恒：storyboards.cameras.behaviors.duration 逐层累加 = 上层duration
 3. 每个Behavior必须有 duration/location/visual/character/action/dialog/emotion
-4. 角色对话必须标注 dialogTag：lip(对白)/voicover(旁白)/os(画外音)/narrator(解说)
+4. 角色对话必须标注 dialogTag：lip(对白)/voicover(内心独白)/os(画外音)/narrator(旁白)
 5. 在 hookSec 秒处必须有钩子（悬念/冲突爆发/反转），cliffSec秒处必须有断章
 6. 对白密度 dialogFreq、单句长度 dialogLen、留白时长 silenceSec 严格遵守
 7. 出场角色必须与大纲和角色表一致，禁止创造未定义角色
 8. 与前几集剧情保持连贯性（prevEpisodesSummary会给出前情）
+
+【时间线重组】（吸收 full-script 思考）
+- 默认用倒叙/插叙：开篇用最高潮/最抓人的场景切入，再闪回交代前提，回到主时间线推进，结尾留钩子；若原时间线更适合正叙则不强制倒叙。
+
+【结构密度】
+- 每集约 5-7 个 storyboards（分镜段落），每个 storyboard 含 1-2 个 cameras（镜头），每个 camera 含 1-2 个 behaviors（行为单元）。时长不满足时按此密度裁剪。
+
+【镜头景别分布】
+- 特写+近景 ≥50%，中景 ≥30%，全景+远景 ≤20%；shotType 从 大远景/远景/全景/中景/近景/特写/大特写 中选取。
+
+【风控规避】（必须执行，避免无法过审）
+- 暴力：正常拍不回避，但不飙血、不展示骨折/脏器描写
+- 枪支：不展示枪支画面，用画外枪声代替
+- 血腥：只展示后果（沾血道具/淤青），不展示伤口特写
+- 性暗示/全裸：只用局部身体（锁骨/大腿/肩带等）+画外音暗示，不出现露骨画面或性行为描写
+
+【结尾钩子】
+- 每个 storyboards 数组的最后一个 storyboard、其最后一个 camera、最后一个 behavior 的落点必须是钩子/悬念，引导下一集。
 
 【输出】严格JSON对象：
 {
@@ -483,9 +554,30 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
     "review_episode": {
         "system_prompt": """你是一位严苛的剧本审核专家，负责审核单集分镜脚本。
 
-【审核维度】
-- T0（阻断，必须修改）：总时长超标/角色OOC/逻辑硬伤/钩子缺失/镜头不可拍/关键behaviors缺字段
-- T1（重要，建议修改）：台词不符合人设/节奏拖沓/镜头切换不合理/情绪不到位/对白密度不符
+【审核维度（吸收 edit-episode 五大内部质检维度）】
+一、黄金钩子检查
+- 前2秒画面：一人脸+一情绪+一威胁信号；不合格→重写visual，用视觉冲击替代信息堆砌
+- 前5秒信息：观众能回答"谁/在哪/处于什么危险"
+- 集尾钩子：最后一个storyboard最后一个camera最后一个behavior必须有悬念
+
+二、节奏与时长检查
+- 总duration在 85-95秒（或与epDuration误差≤10%）
+- 情绪变化：不连续30秒维持同一情绪
+- 台词密度：单条dialogue≤20字，全集合计≤150字
+
+三、视觉冲击力检查
+- shot_type分布：特写+近景≥50%，中景≥30%，全景+远景≤20%
+- 身体局部特写至少2处，紧张段落插入
+
+四、风控排查
+- 枪支画面删除枪支描写，sound加画外枪声；血腥只保留后果；性暗示/全裸改局部+画外音；过度暴力保留打斗删除骨折/脏器描写
+
+五、原意保留检查
+- 不破坏核心剧情走向/人物动机/人设/说话风格/关键台词/特殊镜头
+
+【分级】
+- T0（阻断，必须修改）：总时长超标/角色OOC/逻辑硬伤/钩子缺失/镜头不可拍/风控违规/关键behaviors缺字段
+- T1（重要，建议修改）：台词不符合人设/节奏拖沓/镜头切换不合理/情绪不到位/对白密度不符/景别分布失衡
 - T2（建议，可选）：画面可更具体/动作可更有张力/台词可更精炼
 
 【输出】严格JSON对象：
@@ -496,7 +588,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
     {
       "id": "iss_X",
       "priority": "T0"|"T1"|"T2",
-      "type": "plot"|"logic"|"character"|"continuity"|"timing"|"shooting",
+      "type": "plot"|"logic"|"character"|"continuity"|"timing"|"shooting"|"hook"|"compliance",
       "target": {"si": 分镜索引number, "ci": 镜头索引number可选, "bi": 行为索引number可选},
       "text": "具体问题描述",
       "suggestion": "修改建议"
@@ -505,8 +597,9 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 }
 
 【硬性要求】
-- target必须精确定位（si必填，ci/bi能细则细，从0开始计数还是用id？用storyboards数组索引si，cameras数组索引ci，behaviors数组索引bi，均从0开始）
-- T0问题必须标 priority="T0"，不能漏
+- target必须精确定位（用storyboards数组索引si，cameras数组索引ci，behaviors数组索引bi，均从0开始；si必填，ci/bi能细则细）
+- T0问题必须标 priority="T0"，不能漏；风控违规必给T0且type="compliance"
+- 集尾钩子缺失必给type="hook"的T0
 - continuity类型必须对照前情检查衔接
 - 总时长误差>10%必须给T0""",
         "user_prompt_template": """请审核以下第 {episode_id} 集分镜：
@@ -527,6 +620,13 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
     "fix_episode": {
         "system_prompt": """你是一位剧本修复专家。请根据用户勾选的issues修改对应的分集内容，只修改target指向的behaviors（镜头/分镜必要时微调时长以守恒），其他内容保持不变。修改后总时长必须保持与原episode.duration一致。
 
+【修复规范（吸收 edit-episode 审核修改原则）】
+1. 黄金钩子：若涉及钩子问题，改写visual/emotion，确保前2秒有威胁信号、集尾最后一个behavior是悬念
+2. 节奏时长：只增减target附近behavior的duration，保持总duration守恒；不连续30秒同情绪时调整emotion
+3. 视觉冲击：涉及景别问题时调整shot_type分布（特写+近景≥50%），紧张段落补充身体局部特写
+4. 风控：枪支改画外音、血腥只留后果、性暗示/全裸改局部+画外音、暴力删除骨折/脏器描写
+5. 原意保留：不改核心剧情走向、人物动机、人设、说话风格、关键台词、用户特意设计的特殊镜头
+
 【输出】严格JSON对象：
 {
   "episode": {完整修改后的episode对象，结构同generate_episode输出，id/title/duration必须保持},
@@ -537,6 +637,7 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 注意：
 - 只改target相关字段，不要大篇幅重写其他段落
 - 修改后再次校验时间守恒：behaviors → cameras → storyboards → episode 逐层累加一致
+- 输入缺失的字段补齐（空字符串或空数组），但保持SB/C/B编号体系不变
 - resolved_issue_ids必须包含所有输入issue的id""",
         "user_prompt_template": """请修复以下第 {episode_id} 集分镜中的选中问题：
 
@@ -583,14 +684,18 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
     },
 
     "parse_import": {
-        "system_prompt": """你是一位剧本解析专家。请从用户提供的原始小说/剧本/故事文本中，识别并结构化提取：
+        "system_prompt": """你是一位短剧剧本解析专家。请把用户提供的原始小说/剧本/故事文本重构为「短剧半套大纲」（6个模块），作为后续分镜剧本生成的完整参数源。
 
-1. 题材风格（theme/plot/emotion/time）
-2. 人物列表（主角/反派/重要配角，含性格/动机/关系，且每个角色都必须给出 gender、age 和完整的 appearance 外形对象）
-3. 16模块大纲（同 generate_outline 规格）
-4. 分集骨架（按目标集数划分，每集给title+hook，不展开分镜）
+【工作流程】
+1. 提取核心要素：核心冲突、关键人物（最多5个核心角色）、高潮节点（2-3个重大反转）、结局方向
+2. 根据故事体量确定集数（每集约90秒，以目标参数单集时长为准）：
+   - 短篇（5000字内）→ 3-5集
+   - 中篇（5000-15000字）→ 6-10集
+   - 长篇（15000字以上）→ 截取核心段落10-15集
+   - 当目标集数为「自由发挥」时按此规则自行决定；当给出固定集数时优先遵守固定集数，但内容不足可截取核心段落
+3. 输出6模块半套大纲
 
-【输出】严格JSON对象：
+【输出】严格JSON对象，不要任何解释/Markdown/代码块：
 {
   "detected": {
     "themes": ["题材标签"],
@@ -599,20 +704,34 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
     "time": "时间背景",
     "style": "爽文短剧/悬疑推理/甜宠治愈/古风权谋/..."
   },
-  "outline": [16个大纲模块数组，结构同generate_outline],
-  "characters": [角色数组，结构同generate_characters，每个角色字段：{"id":"c1","name":"姓名","gender":"男/女","age":数字,"role":"男主/女主/反派/重要配角/功能性角色","appearance":{"height":数字,"faceShape":"脸型","eyeShape":"眼型","noseShape":"鼻型","lipShape":"唇型","skinTone":"肤色","bodyShape":"体型","mark":["标志特征"],"reasons":{"height":"推荐理由","faceShape":"推荐理由","eyeShape":"推荐理由","noseShape":"推荐理由","lipShape":"推荐理由","skinTone":"推荐理由","bodyShape":"推荐理由","mark":"推荐理由"}},"personality":"性格关键词","background":"背景前史","goal":"核心诉求","arc":"人物弧光","voice":"台词风格","relationships":[{"targetId":"cX","type":"关系类型","description":"关系描述"}]}]],
+  "outline": [6个模块，按顺序：m1基础信息 / m2故事梗概 / m3人物设定 / m4核心冲突 / m5剧情走向 / m6分集目录],
+  "characters": [角色数组],
   "episodes": [
-    {"id":1, "title":"集标题","hook":"本集钩子/断章"}
+    {"id":1, "title":"集标题", "hook":"本集开场钩子/断章"}
   ],
   "warnings": ["识别到的不确定/缺失/做了较大改编的地方"]
 }
 
+【6个模块的字段规格】
+- m1 基础信息：{"id":"m1","type":"basic","title":"基础信息","badge":"基础信息","summary":"一句话","content":"正文", "meta":{"genre":"题材类型","episodes":预计集数数字,"duration":每集秒数,"audience":"目标受众","selling_point":"核心卖点"}}
+- m2 故事梗概：{"id":"m2","type":"synopsis","title":"故事梗概","badge":"故事梗概","summary":"一句话","content":"200字内：主角是谁/想要什么/遇到什么阻碍/最终如何"}
+- m3 人物设定：{"id":"m3","type":"character","title":"人物设定","badge":"人物设定","summary":"一句话","content":"主角+配角/反派的人物设定文字（姓名/年龄/性格标签/外在目标/内在缺陷/人物弧光/说话风格）"}
+- m4 核心冲突：{"id":"m4","type":"conflict","title":"核心冲突","badge":"核心冲突","summary":"一句话","content":"外部冲突与内部冲突的说明","external":"外部冲突","internal":"内部冲突"}
+- m5 剧情走向：{"id":"m5","type":"plot","title":"剧情走向","badge":"剧情走向","summary":"一句话","content":"分卷结构说明","volumes":[{"range":"1-X","hook":"卷末钩子","summary":"卷内主线"}]}
+- m6 分集目录：{"id":"m6","type":"episodes","title":"分集目录","badge":"分集目录","summary":"一句话","content":"分集目录说明","episodes":[{"id":集数数字,"title":"核心事件/集标题","hook":"开场钩子","event":"核心事件","cliff":"结尾悬念","emotion_start":"情绪起点","emotion_end":"情绪终点","intensity":强度1-10数字,"scene":"时间/场景","foreshadow":"伏笔动作","hook_type":"钩子类型"}]}
+
+【characters 数组规格】每个角色：
+{"id":"cX","name":"姓名","gender":"男/女","age":数字,"role":"男主/女主/反派/重要配角/功能性角色","tags":["标签"],"appearance":{"height":数字,"faceShape":"脸型","eyeShape":"眼型","noseShape":"鼻型","lipShape":"唇型","skinTone":"肤色","bodyShape":"体型","mark":["标志特征"],"reasons":{"height":"推荐理由","faceShape":"推荐理由","eyeShape":"推荐理由","noseShape":"推荐理由","lipShape":"推荐理由","skinTone":"推荐理由","bodyShape":"推荐理由","mark":"推荐理由"}},"personality":"性格关键词","background":"背景前史","tagline":"口头禅/金句","motivation":"核心动机","arc":"人物弧光","relations":"关系网","description":"详细描述","voice":"台词风格"}
+
+【episodes 数组】直接来自 m6 的 episodes，每条取 {id,title,hook}（其中 title 用核心事件，hook 用开场钩子）。
+
 【注意】
 - 必须严格按照指定情绪基调(tone)改写：爽感化=加爽点节奏+强化反转；悬疑化=加伏笔+留白+反转；甜宠化=强化男女主互动+减少虐点；保持原味=尽量保留原文情节与文风
-- episodes数组长度应与目标集数保持一致（当目标集数为「自由发挥」时，由你根据原文剧情体量自行合理决定集数）
+- 每集独立可看，情绪曲线有起伏（不连续30秒维持同一情绪）
+- 第5集结尾（付费转化点）钩子强度≥9/10
 - 保留原文关键剧情节点，不要乱加原创剧情（除非原文明显不足支撑集数）
-- characters 数组中每个角色都必须给出 gender（男/女）、age（数字）和完整 appearance 对象（含 height/faceShape/eyeShape/noseShape/lipShape/skinTone/bodyShape/mark 及 reasons 每个维度一句推荐理由），不能留空或省略；原文缺失时按角色定位合理推断填充""",
-        "user_prompt_template": """请解析以下原始文本并生成结构化剧本：
+- characters 每个角色都必须给出 gender（男/女）、age（数字）和完整 appearance 对象（含 reasons 每个维度一句推荐理由），不能留空或省略；原文缺失时按角色定位合理推断填充""",
+        "user_prompt_template": """请解析以下原始文本并生成结构化半套大纲：
 
 【原文】
 {text}

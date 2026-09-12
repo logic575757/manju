@@ -226,6 +226,16 @@ class AiRewriteSegmentReq(BaseModel):
     candidates: int = 2
 
 
+class AiDispatchShortDramaReq(BaseModel):
+    script_id: Optional[int] = None
+    story_text: Optional[str] = ""
+    has_outline: bool = False
+    user_intent: Optional[str] = ""
+    extra_requirement: Optional[str] = ""
+    specified_episodes: Optional[int] = None
+    episode_script: Optional[str] = ""
+
+
 class AiParseImportReq(BaseModel):
     text: str
     file_name: Optional[str] = ""

@@ -20,7 +20,8 @@ from schemas import (
     AiGenerateOutlineReq, AiModuleModifyReq, AiBatchModifyReq,
     AiReviewOutlineReq, AiReviewCharactersReq, AiGenerateCharactersReq,
     AiGenerateEpisodeReq, AiReviewEpisodeReq, AiFixEpisodeReq,
-    AiRewriteSegmentReq, AiParseImportReq, AiTaskSubmitOut,
+    AiRewriteSegmentReq, AiParseImportReq, AiDispatchShortDramaReq,
+    AiTaskSubmitOut,
 )
 from ai.queue import get_queue, estimated_wait
 from ai.skills_registry import BUILTIN_SKILLS
@@ -34,6 +35,7 @@ class GenericSkillReq(BaseModel):
 
 
 SCHEMA_MAP: Dict[str, Type[BaseModel]] = {
+    "dispatch_short_drama": AiDispatchShortDramaReq,
     "generate_outline": AiGenerateOutlineReq,
     "review_outline": AiReviewOutlineReq,
     "modify_outline_module": AiModuleModifyReq,

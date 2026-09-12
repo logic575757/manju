@@ -3561,24 +3561,38 @@ input[type="checkbox"] {
     episodes.forEach(ep => { if (!episodeIssues[ep.id]) episodeIssues[ep.id] = []; });
     currentEpisodeId = 1;
   }
-  // 按大纲模块重建分集（每个模块对应一集，分镜留空待 AI 生成）
+  // 从大纲中提取分集目录：优先半套大纲 m6.episodes，其次旧式各模块 episodes 合并
+  function _extractOutlineEpisodes() {
+    const mods = (Array.isArray(outlineData) && outlineData.length) ? outlineData : [];
+    const m6 = mods.find(m => m && (m.id === 'm6' || m.type === 'episodes'));
+    if (m6 && Array.isArray(m6.episodes) && m6.episodes.length) return m6.episodes;
+    const merged = [];
+    mods.forEach(m => {
+      if (m && Array.isArray(m.episodes)) m.episodes.forEach(e => { if (e) merged.push(e); });
+    });
+    return merged;
+  }
+  // 按大纲分集目录重建分集（半套大纲 m6.episodes / 旧式模块 episodes；分镜留空待 AI 生成）
   function buildEpisodesFromOutline(epDur, sbSec) {
     sbSec = Math.max(1, parseInt(sbSec, 10) || 15);
     epDur = Math.max(sbSec, parseInt(epDur, 10) || 90);
     const sbCount = Math.ceil(epDur / sbSec);
-    const mods = (Array.isArray(outlineData) && outlineData.length) ? outlineData : [];
-    if (!mods.length) {
+    const epList = _extractOutlineEpisodes();
+    if (!epList.length) {
       const { totalEp, pregen } = getCfgValues();
       buildDemoEpisodes(epDur, sbSec, totalEp, pregen);
       return;
     }
     episodes = [];
-    mods.forEach((m, i) => {
-      const id = i + 1;
-      const title = (m && (m.title || m.module)) || ('第 ' + id + ' 集 · 待生成');
+    epList.forEach((e, i) => {
+      const id = (e && e.id != null) ? e.id : (i + 1);
+      const title = (e && (e.title || e.range || e.hook)) || ('第 ' + id + ' 集 · 待生成');
       episodes.push({
         id, title, duration: epDur, sbSec, sbCount, camCount: 0, behCount: 0,
-        storyboards: [], moduleId: (m && m.id) ? m.id : null, summary: (m && m.summary) || ''
+        storyboards: [],
+        moduleId: (e && e.moduleId) ? e.moduleId : null,
+        summary: (e && (e.summary || e.event || e.hook)) || '',
+        hook: (e && e.hook) || ''
       });
     });
     episodeSceneData = {};
@@ -3778,15 +3792,35 @@ input[type="checkbox"] {
     return outlineState.queuedModules.has(mid);
   }
 
-  // 目录分组规则：按模块id前缀/位置自动分5组
-  const tocGroups = [
-    { key: 'g0', title: '总览', ids: ['m0'] },
-    { key: 'g1', title: '一、基础核心设定', ids: ['m1-1','m1-2','m1-3','m1-4'] },
-    { key: 'g2', title: '二、人物与成长弧光', ids: ['m2-1','m2-2','m2-3','m2-4','m2-5','m2-6'] },
-    { key: 'g3', title: '三、爽点与重大反转', ids: ['m3-1','m3-2'] },
-    { key: 'g4', title: '四、分卷剧情（100集全）', ids: ['m4-1','m4-2','m4-3','m4-4'] },
-    { key: 'g5', title: '五、逻辑闭环', ids: ['m5'] }
-  ];
+  // 目录分组：半套大纲按 type 分6组，旧式16模块按 id 前缀分5组
+  function _buildTocGroups() {
+    const mods = (Array.isArray(outlineData) && outlineData.length) ? outlineData : [];
+    const hasHalf = mods.some(m => m && ['basic','synopsis','character','conflict','plot','episodes'].indexOf(m.type) >= 0);
+    if (hasHalf) {
+      const defs = [
+        { type: 'basic', title: '一、基础信息' },
+        { type: 'synopsis', title: '二、故事梗概' },
+        { type: 'character', title: '三、人物设定' },
+        { type: 'conflict', title: '四、核心冲突' },
+        { type: 'plot', title: '五、剧情走向' },
+        { type: 'episodes', title: '六、分集目录' },
+      ];
+      const groups = [];
+      defs.forEach(def => {
+        const ids = mods.filter(m => m && m.type === def.type).map(m => m.id);
+        if (ids.length) groups.push({ key: 'h-' + def.type, title: def.title, ids: ids });
+      });
+      return groups;
+    }
+    return [
+      { key: 'g0', title: '总览', ids: ['m0'] },
+      { key: 'g1', title: '一、基础核心设定', ids: ['m1-1','m1-2','m1-3','m1-4'] },
+      { key: 'g2', title: '二、人物与成长弧光', ids: ['m2-1','m2-2','m2-3','m2-4','m2-5','m2-6'] },
+      { key: 'g3', title: '三、爽点与重大反转', ids: ['m3-1','m3-2'] },
+      { key: 'g4', title: '四、分卷剧情（100集全）', ids: ['m4-1','m4-2','m4-3','m4-4'] },
+      { key: 'g5', title: '五、逻辑闭环', ids: ['m5'] }
+    ];
+  }
 
   function renderOutlineToc() {
     const toc = document.getElementById('outlineToc');
@@ -3794,6 +3828,7 @@ input[type="checkbox"] {
     const map = {};
     outlineData.forEach(m => { map[m.id] = m; });
     const usedIds = {};
+    const tocGroups = _buildTocGroups();
     tocGroups.forEach(g => g.ids.forEach(id => { usedIds[id] = true; }));
     const restIds = outlineData.map(m => m.id).filter(id => !usedIds[id]);
     const groups = tocGroups.slice();
@@ -4119,11 +4154,11 @@ input[type="checkbox"] {
             <div class="space-y-1.5">
               ${m.episodes.map((ep,ei) => `
                 <div class="flex items-center gap-2 px-3 py-2 border border-border/70 rounded-md bg-card/70 hover:bg-muted/20 transition-colors">
-                  ${outlineEditableHtml(m.id, 'episodes.'+ei+'.range', ep.range, {tag:'span', cls:'outl-pill shrink-0', multiline:false, placeholder:'集数范围'})}
+                  ${outlineEditableHtml(m.id, 'episodes.'+ei+'.range', ep.range || ep.title || ('第' + (ep.id != null ? ep.id : (ei+1)) + '集'), {tag:'span', cls:'outl-pill shrink-0', multiline:false, placeholder:'集数范围'})}
                   <span class="text-[10px] text-muted-foreground/60 shrink-0">·</span>
                   ${outlineEditableHtml(m.id, 'episodes.'+ei+'.hook', ep.hook, {tag:'span', cls:'text-[11px] font-medium text-foreground/80 outl-inline shrink-0 max-w-[120px] truncate', multiline:false, placeholder:'钩子'})}
                   <span class="text-[10px] text-muted-foreground/40 shrink-0">—</span>
-                  ${outlineEditableHtml(m.id, 'episodes.'+ei+'.summary', ep.summary, {tag:'span', cls:'text-[11px] leading-relaxed text-foreground/65 outl-inline flex-1 min-w-0 truncate', multiline:false, placeholder:'点击输入10-20字剧情概括...', title:ep.summary || '点击编辑概括'})}
+                  ${outlineEditableHtml(m.id, 'episodes.'+ei+'.summary', ep.summary || ep.event || '', {tag:'span', cls:'text-[11px] leading-relaxed text-foreground/65 outl-inline flex-1 min-w-0 truncate', multiline:false, placeholder:'点击输入10-20字剧情概括...', title:(ep.summary || ep.event || '点击编辑概括')})}
                   <button type="button" class="text-[10px] text-muted-foreground/50 hover:text-destructive shrink-0 ml-1" onclick="removeEpisodeGroup('${m.id}',${ei})">×</button>
                 </div>
               `).join('')}
@@ -7219,6 +7254,8 @@ input[type="checkbox"] {
     if (_aiPollTimer) { clearInterval(_aiPollTimer); _aiPollTimer = null; }
   }
 
+  let _shortDramaDispatchCtx = null;
+
   function _aiDoneLabel(taskKey) {
     const labels = {
       generate_outline: '大纲生成',
@@ -7232,6 +7269,7 @@ input[type="checkbox"] {
       fix_episode: '分集修复',
       rewrite_segment: '片段改写',
       parse_import: '导入解析',
+      dispatch_short_drama: '路由判断',
     };
     return labels[taskKey] || 'AI 任务';
   }
@@ -7653,10 +7691,97 @@ input[type="checkbox"] {
         renderOutline(); renderCharacters(); renderEpisodes();
         break;
       }
+      case 'dispatch_short_drama': {
+        const ctx = _shortDramaDispatchCtx || { scriptId: currentScriptId };
+        ctx.route = result.route || (result.skill === 'short-drama-edit-episode' ? 'edit_episode' : (result.skill === 'short-drama-full-script' ? 'full_script' : 'half_outline'));
+        ctx.skill = result.skill || '';
+        ctx.reason = result.reason || '';
+        ctx.question = result.question || '';
+        ctx.options = Array.isArray(result.options) ? result.options : [];
+        _shortDramaDispatchCtx = ctx;
+        if (ctx.route === 'ask' && ctx.question) {
+          _showShortDramaAsk(ctx);
+        } else {
+          _runShortDramaRoute(ctx);
+        }
+        break;
+      }
       default:
         return false;
     }
     return true;
+  }
+
+  function _shortDramaRouteForOption(opt) {
+    const s = String(opt || '');
+    if (/提供故事|补充故事|输入故事/.test(s)) return 'input_story';
+    if (/指定集数|某集|修改|审核|修复/.test(s)) return 'edit_episode';
+    if (/分镜/.test(s)) return 'full_script';
+    if (/剧本/.test(s)) return 'full_script';
+    if (/大纲/.test(s)) return 'half_outline';
+    return 'half_outline';
+  }
+
+  function _runShortDramaRoute(ctx) {
+    ctx = ctx || {};
+    const route = ctx.route || 'half_outline';
+    const scriptId = ctx.scriptId || currentScriptId;
+    const params = ctx.params || {};
+    if (!scriptId) return showToast('缺少剧本，无法继续', 'error');
+    if (route === 'input_story') {
+      showToast('请在「故事文本 / 补充要求」中补充故事内容后再次生成', 'info');
+      return;
+    }
+    if (route === 'edit_episode') {
+      showToast('已路由到「分镜审核修改」：请在分集步骤对目标集执行自审 / 修复', 'info');
+      return;
+    }
+    if (route === 'full_script') {
+      if (outlineData && outlineData.length) {
+        ensureEpisodesBuilt();
+        setStep(3);
+        if (typeof renderOutline === 'function') renderOutline();
+        if (typeof renderCharacters === 'function') renderCharacters();
+        if (typeof renderEpisodes === 'function') renderEpisodes();
+        generateEpisodeContentBridge(currentEpisodeId || 1);
+      } else {
+        submitAiTask(scriptId, 'generate_outline', '分镜剧本（先生成大纲）', () => ApiClient.ai.generateOutline(scriptId, params));
+      }
+      return;
+    }
+    submitAiTask(scriptId, 'generate_outline', '大纲生成', () => ApiClient.ai.generateOutline(scriptId, params));
+  }
+
+  function _showShortDramaAsk(ctx) {
+    ctx = ctx || {};
+    const question = ctx.question || '请选择要执行的目标';
+    const options = (Array.isArray(ctx.options) && ctx.options.length) ? ctx.options : ['半套大纲', '分镜剧本'];
+    let mask = document.getElementById('shortDramaAskMask');
+    if (!mask) {
+      mask = document.createElement('div');
+      mask.id = 'shortDramaAskMask';
+      mask.className = 'fixed inset-0 bg-black/30 z-[120] flex items-center justify-center';
+      document.body.appendChild(mask);
+    }
+    const reason = ctx.reason ? ('<div class="text-xs text-muted-foreground mb-3">' + escapeHtml(ctx.reason) + '</div>') : '';
+    const btns = options.map(o => {
+      const route = _shortDramaRouteForOption(o);
+      return '<button type="button" class="wf-btn-primary px-4 py-2 text-sm" data-route="' + escapeHtml(route) + '">' + escapeHtml(o) + '</button>';
+    }).join('');
+    mask.innerHTML = '<div class="bg-card border border-border rounded-xl wf-shadow-lg p-5 w-[380px] max-w-[90vw]">'
+      + '<div class="font-semibold text-sm mb-1">短剧路由确认</div>'
+      + '<div class="text-sm text-foreground mb-1">' + escapeHtml(question) + '</div>'
+      + reason
+      + '<div class="flex items-center gap-2 justify-end mt-4">' + btns + '</div>'
+      + '</div>';
+    mask.onclick = function (e) {
+      if (e.target === mask) { mask.remove(); return; }
+      const btn = e.target.closest('button[data-route]');
+      if (!btn) return;
+      const route = btn.getAttribute('data-route');
+      mask.remove();
+      _runShortDramaRoute({ ...ctx, route: route });
+    };
   }
 
   async function _pollAiTasks() {
@@ -7756,7 +7881,21 @@ input[type="checkbox"] {
       sewing_novels: Array.isArray(ai.sewingNovels) ? ai.sewingNovels : [],
       pace: ai.pace || null,
     };
-    await submitAiTask(currentScriptId, 'generate_outline', '大纲生成', () => ApiClient.ai.generateOutline(currentScriptId, params));
+    const storyText = (ai.prompt || '').trim();
+    _shortDramaDispatchCtx = {
+      scriptId: currentScriptId,
+      intent: '大纲',
+      params: params,
+      storyText: storyText,
+    };
+    await submitAiTask(currentScriptId, 'dispatch_short_drama', '路由判断', () =>
+      ApiClient.ai.dispatchShortDrama(currentScriptId, {
+        story_text: storyText,
+        has_outline: !!(outlineData && outlineData.length),
+        user_intent: '大纲',
+        extra_requirement: ai.prompt || '',
+      })
+    );
   }
   window.generateOutline = generateOutlineBridge;
 

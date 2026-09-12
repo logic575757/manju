@@ -3773,8 +3773,13 @@ input[type="checkbox"] {
     if (!toc) return;
     const map = {};
     outlineData.forEach(m => { map[m.id] = m; });
+    const usedIds = {};
+    tocGroups.forEach(g => g.ids.forEach(id => { usedIds[id] = true; }));
+    const restIds = outlineData.map(m => m.id).filter(id => !usedIds[id]);
+    const groups = tocGroups.slice();
+    if (restIds.length) groups.push({ key: 'rest', title: '解析大纲', ids: restIds });
     let html = '';
-    tocGroups.forEach(g => {
+    groups.forEach(g => {
       const items = g.ids.map(id => map[id]).filter(Boolean);
       if (items.length === 0) return;
       html += `<div class="toc-group mb-2">
@@ -7343,6 +7348,84 @@ input[type="checkbox"] {
     return res;
   }
 
+  function normalizeOutlineModule(m, idx) {
+    if (!m || typeof m !== 'object') return null;
+    const index = m.index != null ? m.index : (idx + 1);
+    const id = String(m.id != null ? m.id : ('m' + index));
+    const title = m.title || m.module || ('模块 ' + index);
+    const summary = m.summary || '';
+    const existingContent = (typeof m.content === 'string' && m.content.trim()) ? m.content : null;
+    const keyEvents = Array.isArray(m.key_events) ? m.key_events : (Array.isArray(m.keyEvents) ? m.keyEvents : []);
+    const eventsBlock = keyEvents.length ? ('【关键事件】\n' + keyEvents.map(e => '· ' + e).join('\n')) : '';
+    const twist = m.twist || m.turning_point || '';
+    const content = existingContent || [
+      summary ? ('【概要】' + summary) : '',
+      m.goal ? ('【阶段目标】' + m.goal) : '',
+      m.conflict ? ('【核心冲突】' + m.conflict) : '',
+      twist ? ('【钩子/反转】' + twist) : '',
+      m.ending ? ('【落点】' + m.ending) : '',
+      eventsBlock
+    ].filter(Boolean).join('\n\n');
+    return {
+      ...m,
+      id,
+      type: m.type || 'section',
+      title,
+      badge: m.badge != null ? m.badge : (m.module || ('第' + index + '幕')),
+      summary,
+      aiScore: typeof m.aiScore === 'number' ? m.aiScore : (m.aiScore ? parseInt(m.aiScore, 10) : 0),
+      content,
+      issues: Array.isArray(m.issues) ? m.issues : []
+    };
+  }
+
+  function normalizeCharacters(list) {
+    const toStr = (v) => Array.isArray(v) ? v.join('、') : (v == null ? '' : String(v));
+    return (Array.isArray(list) ? list : []).map((c, idx) => {
+      if (!c || typeof c !== 'object') return null;
+      const id = String(c.id != null ? c.id : ('c' + (idx + 1)));
+      const name = toStr(c.name) || ('角色' + (idx + 1));
+      let appearance = c.appearance;
+      if (appearance && typeof appearance !== 'object') {
+        appearance = { description: appearance };
+      } else if (!appearance) {
+        appearance = {};
+      }
+      let relations = c.relations;
+      if (relations == null && Array.isArray(c.relationships)) {
+        relations = c.relationships.map(r => {
+          if (!r || typeof r !== 'object') return '';
+          const label = r.description || r.targetId || r.target || '';
+          const type = r.type || '';
+          return label + (type ? ('（' + type + '）') : '');
+        }).filter(Boolean).join('、');
+      }
+      if (relations == null && typeof c.relationship === 'string') {
+        relations = c.relationship;
+      }
+      const personality = toStr(c.personality);
+      const description = toStr(c.description || c.desc) || personality || toStr(c.archetype) || toStr(c.role) || name;
+      return {
+        ...c,
+        id,
+        name,
+        gender: c.gender != null ? c.gender : (appearance.gender != null ? appearance.gender : ''),
+        age: c.age != null ? c.age : (appearance.age != null ? appearance.age : ''),
+        role: toStr(c.role) || '配角',
+        tags: Array.isArray(c.tags) ? c.tags : [],
+        appearance,
+        personality,
+        background: toStr(c.background),
+        tagline: toStr(c.tagline || c.voice),
+        arc: toStr(c.arc),
+        relations: relations || '',
+        motivation: toStr(c.motivation || c.goal),
+        description,
+        issues: Array.isArray(c.issues) ? c.issues : []
+      };
+    }).filter(Boolean);
+  }
+
   function _applyAiResultToState(taskKey, result, reg) {
     if (!result) result = {};
     switch (taskKey) {
@@ -7350,7 +7433,7 @@ input[type="checkbox"] {
         const mods = Array.isArray(result.outline) ? result.outline : (Array.isArray(result) ? result : []);
         if (mods.length) {
           outlineData.length = 0;
-          mods.forEach(m => outlineData.push(m));
+          mods.forEach((m, i) => { const nm = normalizeOutlineModule(m, i); if (nm) outlineData.push(nm); });
         }
         setStep(1);
         renderOutline();
@@ -7401,7 +7484,7 @@ input[type="checkbox"] {
         const list = result.characters || result;
         if (Array.isArray(list)) {
           characterData.length = 0;
-          list.forEach(c => characterData.push(c));
+          normalizeCharacters(list).forEach(c => characterData.push(c));
         }
         renderCharacters();
         break;
@@ -7482,9 +7565,18 @@ input[type="checkbox"] {
       case 'parse_import': {
         let parsed = result;
         if (parsed && parsed.result && typeof parsed.result === 'object' && !parsed.outline && !parsed.characters && !parsed.episodes) parsed = parsed.result;
-        if (parsed && Array.isArray(parsed.outline)) { outlineData.length = 0; parsed.outline.forEach(m => outlineData.push(m)); }
-        if (parsed && Array.isArray(parsed.characters)) { characterData.length = 0; parsed.characters.forEach(c => characterData.push(c)); }
-        if (parsed && Array.isArray(parsed.episodes)) { episodes.length = 0; parsed.episodes.forEach(e => episodes.push(e)); }
+        if (parsed && Array.isArray(parsed.outline)) {
+          outlineData.length = 0;
+          parsed.outline.forEach((m, i) => { const nm = normalizeOutlineModule(m, i); if (nm) outlineData.push(nm); });
+        }
+        if (parsed && Array.isArray(parsed.characters)) {
+          characterData.length = 0;
+          normalizeCharacters(parsed.characters).forEach(c => characterData.push(c));
+        }
+        if (parsed && Array.isArray(parsed.episodes) && parsed.episodes.every(e => e && Array.isArray(e.storyboards))) {
+          episodes.length = 0;
+          parsed.episodes.forEach(e => episodes.push(e));
+        }
         setStep(1);
         renderOutline(); renderCharacters(); renderEpisodes();
         break;

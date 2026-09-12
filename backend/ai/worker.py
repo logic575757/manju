@@ -125,6 +125,7 @@ class WorkerPool:
         result_json = None
         result_text_parts = []
         cancelled = False
+        heartbeat_task = None
 
         try:
             task = db.query(AiTask).filter(AiTask.id == task_id).first()
@@ -182,6 +183,16 @@ class WorkerPool:
                 prompt.system_prompt,
                 prompt.user_prompt_template,
             )
+
+            async def _keepalive():
+                try:
+                    while True:
+                        await asyncio.sleep(settings.queue_heartbeat_interval)
+                        self.queue.heartbeat(db, task_id)
+                except asyncio.CancelledError:
+                    pass
+
+            heartbeat_task = asyncio.create_task(_keepalive())
 
             async with asyncio.timeout(task_timeout):
                 async for chunk in run_gen:
@@ -321,6 +332,12 @@ class WorkerPool:
                 call_row.latency_ms = exec_ms
                 db.commit()
         finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
             db.close()
 
     @staticmethod

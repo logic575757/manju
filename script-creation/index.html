@@ -7451,6 +7451,12 @@ input[type="checkbox"] {
           outlineData.length = 0;
           mods.forEach((m, i) => { const nm = normalizeOutlineModule(m, i); if (nm) outlineData.push(nm); });
         }
+        if (Array.isArray(result.characters)) {
+          characterData.length = 0;
+          normalizeCharacters(result.characters).forEach(c => characterData.push(c));
+          currentCharId = characterData.length ? characterData[0].id : 'c1';
+          renderCharacters();
+        }
         setStep(1);
         renderOutline();
         if (typeof renderOutlineToc === 'function') renderOutlineToc();

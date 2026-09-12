@@ -181,7 +181,23 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
   [11-12] id="m3-1"~"m3-2" type="plot" 爽点与反转两模块（大爽点清单+关键反转节点）
   [13-16] id="m4-1"~"m4-4" type="volume" 分卷剧情四模块（对应4个大阶段，每个必须带episodes数组：元素{range:"1-5",hook:"本卷结尾断章",summary:"卷内主线"}，episodes总数严格等于总集数episodes）
   [17注意：总模块数应为16；m4-x的episodes累加range长度 === episodes参数；m4之后紧跟 id="m5" type="closure" 逻辑闭环模块]
-  实际上请按 m0 + m1-1~m1-4(4) + m2-1~m2-6(6) + m3-1~m3-2(2) + m4-1~m4-4(4) + m5 = 18个模块？不对——按Excel规格是16个：m0 + 世界观4 + 核心人物6 + 爽点反转2 + 分卷剧情2（每卷对应若干episodes）+ m5 = 16。请以 episodes 数量为准合理分配分卷（建议4卷）。
+  实际上请按 m0 + m1-1~m1-4(4) + m2-1~m2-6(6) + m3-1~m3-2(2) + m4-1~m4-4(4) + m5 = 16。请以 episodes 数量为准合理分配分卷（建议4卷）。
+- characters: 数组，2-6个核心角色（必须与 m2-1~m2-6 的核心人物一一对应），用于直接预填写入"人物小传"模块。每个对象字段：
+  id: "cX"（X从1递增，如 c1/c2/c3）
+  name: "姓名"
+  gender: "男"或"女"
+  age: 数字（15-60）
+  role: "男主/女主/反派/重要配角/功能性角色"
+  tags: ["标签1","标签2"]
+  appearance: {"height":数字（150-195，单位cm，不要写成"168cm"这种带单位字符串）,"faceShape":"脸型","eyeShape":"眼型","noseShape":"鼻型","lipShape":"唇型","skinTone":"肤色","bodyShape":"体型","mark":["标志特征"]}
+  personality: "性格关键词组合"
+  background: "身份背景/前史（50-120字）"
+  tagline: "口头禅/金句"
+  motivation: "核心动机（最想要什么/怕什么）"
+  arc: "人物弧光：起点→关键转折→终点"
+  relations: "关系网：与谁是什么关系/张力点"
+  description: "详细描述（50-150字）"
+  voice: "台词风格（书面语/口语化/高冷/泼辣等）"
 
 每个模块对象字段：
   id: string（严格按上面的id规则）
@@ -200,7 +216,8 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 3. 必须遵守 tags/theme/plot/emotion 指定的风格
 4. must 中指定的要素必须出现，avoid 中指定的套路必须避开
 5. 每卷结尾必须有钩子(hook)，最后一卷结尾必须留悬念或大反转
-6. content 中禁止出现"本模块""此处省略""略"等占位词""",
+6. content 中禁止出现"本模块""此处省略""略"等占位词
+7. characters 数组中每个角色都必须给出 gender（男/女）、age（数字）和 appearance（含 height/faceShape/eyeShape/noseShape/lipShape/skinTone/bodyShape/mark），不能留空""",
         "user_prompt_template": """请根据以下创作配置生成短剧大纲（16模块严格JSON）：
 
 {config_json}""",

@@ -3553,23 +3553,33 @@ input[type="checkbox"] {
     episodes.forEach(ep => { if (!episodeIssues[ep.id]) episodeIssues[ep.id] = []; });
     currentEpisodeId = 1;
   }
+  // 按大纲模块重建分集（每个模块对应一集，分镜留空待 AI 生成）
+  function buildEpisodesFromOutline(epDur, sbSec) {
+    sbSec = Math.max(1, parseInt(sbSec, 10) || 15);
+    epDur = Math.max(sbSec, parseInt(epDur, 10) || 90);
+    const sbCount = Math.ceil(epDur / sbSec);
+    const mods = (Array.isArray(outlineData) && outlineData.length) ? outlineData : [];
+    if (!mods.length) {
+      const { totalEp, pregen } = getCfgValues();
+      buildDemoEpisodes(epDur, sbSec, totalEp, pregen);
+      return;
+    }
+    episodes = [];
+    mods.forEach((m, i) => {
+      const id = i + 1;
+      const title = (m && (m.title || m.module)) || ('第 ' + id + ' 集 · 待生成');
+      episodes.push({
+        id, title, duration: epDur, sbSec, sbCount, camCount: 0, behCount: 0,
+        storyboards: [], moduleId: (m && m.id) ? m.id : null, summary: (m && m.summary) || ''
+      });
+    });
+    episodeSceneData = {};
+    episodes.forEach(ep => { episodeSceneData[ep.id] = ep.storyboards; });
+    episodes.forEach(ep => { if (!episodeIssues[ep.id]) episodeIssues[ep.id] = []; });
+    currentEpisodeId = 1;
+  }
   // ========== 按集索引的 AI 自审问题清单 ==========
-  const episodeIssues = {
-    1: [
-      { id: 'i1_1', priority: 'T0', type: 'plot',      target: { si: 0, ci: 0 }, text: '开篇缺少视觉钩子，建议加一个特写（例：门铃特写/雨打玻璃）作为情绪入口。', status: 'pending' },
-      { id: 'i1_2', priority: 'T0', type: 'rhythm',    target: { si: 1, ci: 1 }, text: '第2分镜第2镜头时长偏长（6s固定镜头），建议拆为2个短镜头提升节奏。', status: 'pending' },
-      { id: 'i1_3', priority: 'T1', type: 'character', target: { si: 2, ci: 0 }, text: '顾言第一次登场没有特写/眼神戏，建议补一个近景情绪镜头建立人物。', status: 'pending' },
-      { id: 'i1_4', priority: 'T1', type: 'logic',     target: { si: 3 },        text: '地点从"出租屋"切到"地下车库"无过渡描述，建议补一个运镜/环境空镜衔接。', status: 'pending' },
-      { id: 'i1_5', priority: 'T2', type: 'dialog',    target: { si: 4, ci: 1 }, text: '第5分镜对白略密，建议压缩至2句以内，把信息交给画面呈现。', status: 'pending' }
-    ],
-    2: [
-      { id: 'i2_1', priority: 'T0', type: 'atmosphere',target: { si: 0 },        text: '地下车库跟踪戏氛围不足，建议增加音效提示与一个俯拍空镜建立紧张感。', status: 'pending' },
-      { id: 'i2_2', priority: 'T1', type: 'dialog',    target: { si: 1, ci: 0 }, text: '顾言部分台词略显生硬，建议调整为更口语化的短句。', status: 'resolved' },
-      { id: 'i2_3', priority: 'T1', type: 'continuity',target: { si: 2 },        text: '时间线未交代（白天/夜晚），建议在画面列加"冷色荧光灯"等提示。', status: 'pending' },
-      { id: 'i2_4', priority: 'T2', type: 'emotion',   target: { si: 3, ci: 1 }, text: '情绪切换略突兀，可加1个慢推近景作为过渡。', status: 'pending' },
-      { id: 'i2_5', priority: 'T2', type: 'rhythm',    target: { si: 4 },        text: '集尾收束节奏偏平，建议最后一镜用大特写定格制造悬念。', status: 'pending' }
-    ]
-  };
+  const episodeIssues = {};
 
   let currentStep = 0;
 
@@ -6439,7 +6449,11 @@ input[type="checkbox"] {
   function ensureEpisodesBuilt() {
     if (!episodes || episodes.length === 0) {
       const { epDur, shotSec, totalEp, pregen } = getCfgValues();
-      buildDemoEpisodes(epDur, shotSec, totalEp, pregen);
+      if (outlineData && outlineData.length) {
+        buildEpisodesFromOutline(epDur, shotSec);
+      } else {
+        buildDemoEpisodes(epDur, shotSec, totalEp, pregen);
+      }
     }
   }
 
@@ -6877,10 +6891,12 @@ input[type="checkbox"] {
         characterData.length = 0;
         content.characters.forEach(c => characterData.push(c));
       }
+      currentCharId = characterData.length ? characterData[0].id : 'c1';
       if (content.episodes && Array.isArray(content.episodes)) {
         episodes.length = 0;
         content.episodes.forEach(e => episodes.push(e));
       }
+      episodes.forEach(e => recalcEpisode(e));
       // 恢复路径
       if (s.path_type === 'B') selectPath('B'); else selectPath('A');
       // 更新 header 当前剧本名
@@ -7486,6 +7502,7 @@ input[type="checkbox"] {
           characterData.length = 0;
           normalizeCharacters(list).forEach(c => characterData.push(c));
         }
+        currentCharId = characterData.length ? characterData[0].id : 'c1';
         renderCharacters();
         break;
       }
@@ -7503,13 +7520,24 @@ input[type="checkbox"] {
       }
       case 'generate_episode': {
         const newEp = result.episode || result;
+        let targetId = currentEpisodeId;
         if (newEp && typeof newEp === 'object') {
           const id = newEp.id;
+          targetId = id;
           const idx = episodes.findIndex(e => String(e.id) === String(id));
-          if (idx >= 0) episodes[idx] = { ...episodes[idx], ...newEp, id: episodes[idx].id };
-          else episodes.push({ ...newEp, id: id });
+          if (idx >= 0) {
+            episodes[idx] = { ...episodes[idx], ...newEp, id: episodes[idx].id };
+            recalcEpisode(episodes[idx]);
+            episodeSceneData[episodes[idx].id] = episodes[idx].storyboards;
+          } else {
+            const pushed = { ...newEp, id: id };
+            recalcEpisode(pushed);
+            episodes.push(pushed);
+            episodeSceneData[id] = pushed.storyboards;
+          }
         }
         renderEpisodes();
+        if (String(targetId) === String(currentEpisodeId)) changeEpisode(currentEpisodeId);
         break;
       }
       case 'fix_episode': {
@@ -7576,7 +7604,13 @@ input[type="checkbox"] {
         if (parsed && Array.isArray(parsed.episodes) && parsed.episodes.every(e => e && Array.isArray(e.storyboards))) {
           episodes.length = 0;
           parsed.episodes.forEach(e => episodes.push(e));
+        } else if (parsed && Array.isArray(parsed.outline) && parsed.outline.length) {
+          // 导入仅含大纲/人物时，清空旧分集；进入分集步骤时按大纲重建
+          episodes.length = 0;
+          episodeSceneData = {};
+          currentEpisodeId = 1;
         }
+        currentCharId = characterData.length ? characterData[0].id : 'c1';
         setStep(1);
         renderOutline(); renderCharacters(); renderEpisodes();
         break;

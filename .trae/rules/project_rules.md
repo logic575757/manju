@@ -6,13 +6,13 @@
 
 - 项目名称：剧本创作平台（script creation platform）
 - 定位：AI 辅助剧本创作，含大纲 / 人物 / 分集 / 导入解析等 11 个 AI 能力
-- 技术栈：FastAPI（后端） + Vite 原生 JS 单页（前端） + MySQL 8.0（生产库）+ SQLite（可选兜底）
+- 技术栈：FastAPI（后端） + Vite 原生 JS 单页（前端） + MySQL 8.0.46（唯一数据库）
 
 ## 2. 组件清单
 
 | 组件 | 技术/版本 | 位置 | 端口 | 状态 |
 |------|-----------|------|------|------|
-| 数据库 | MySQL 8.0.46 | 本机（沙箱内） | 3306 | **项目标准组件，本来就有** |
+| 数据库 | MySQL 8.0.46 | 本机（沙箱内） | 3306 | 本会话安装并投入使用（唯一数据库） |
 | 后端 | FastAPI + Python 3.11.15 | `/workspace/backend` | 8000 | 需手动启动 |
 | 前端 | Vite 5（原生 JS SPA） | `/workspace/script-creation` | 5173 | 需手动启动 |
 | AI 引擎 | MockProvider（默认）/ LLMProvider（OpenAI 协议） | `/workspace/backend/ai` | — | mock 默认 |
@@ -51,12 +51,11 @@ cd /workspace/backend
 /root/.pyenv/versions/3.11.15/bin/python main.py
 ```
 
-### 数据库选择逻辑（`config.py` 的 `database_url` 属性）
+### 数据库选择（`config.py` 的 `database_url` 属性）
 
-1. 若设置了环境变量 `DATABASE_URL` → 直接用（这就是之前落到 SQLite 的原因）
-2. 否则 → `mysql+pymysql://script_user:script_pass_2024@127.0.0.1:3306/script_creation?charset=utf8mb4`
-
-**要用 MySQL，就不要设置 `DATABASE_URL` 环境变量。** 只有在 MySQL 不可用时才临时用 `DATABASE_URL="sqlite:///./script_creation.db"` 兜底。
+- `database_url` 属性**固定返回** `mysql+pymysql://script_user:script_pass_2024@127.0.0.1:3306/script_creation?charset=utf8mb4`。
+- 已移除 `DATABASE_URL` 环境变量覆盖与 SQLite 兜底：后端只连 MySQL 8.0.46，不存在第二套数据库。
+- 遗留的 SQLite 文件 `/workspace/backend/script_creation.db` 已删除。
 
 ## 5. 前端（Vite）
 
@@ -196,6 +195,6 @@ cd /workspace/script-creation && npm run dev
 1. **MySQL 不会自动启动**：沙箱无 systemd，装完/重启后要手动 `mysqld --user=mysql`。
 2. **`/health` 会 404**：健康检查是 `/api/health`。
 3. **历史坑已修**：`httpx` 曾漏写进 requirements.txt（导致新环境 `ModuleNotFoundError: httpx`），现已补为 `httpx==0.28.1`。
-4. **别用 `DATABASE_URL` 覆盖成 SQLite**：项目标准是 MySQL；只有在 MySQL 确实不可用时才临时兜底 SQLite。
+4. **后端只连 MySQL**：`config.py` 已移除 `DATABASE_URL` 环境变量覆盖，`database_url` 固定指向 MySQL；不再存在 SQLite 兜底。
 5. **fix_episode 结果契约**：mock/LLM 的 fix_episode 必须返回 `resolved_issue_ids`，否则前端无法把问题标记为已解决。
 6. **`ai_tasks` 的列名是 `skill_name`**，不是 `skill`。

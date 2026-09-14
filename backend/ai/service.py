@@ -74,19 +74,35 @@ class AiService:
         return self.db.query(AiProvider).filter(AiProvider.name == "mock").first()
 
     def _get_provider(self, task_key: str):
-        """根据 provider 行实例化对应的 Provider 对象。"""
+        """根据 provider 行实例化对应的 Provider 对象。
+
+        当 DB 中没有可用的真实 provider 时，回退读取配置文件（.env）中的 LLM 凭据。
+        """
         from ai.mock_provider import get_provider as get_mock
 
         row = self._resolve_provider(task_key)
         self._provider_row = row
-        if row is None or row.provider == "mock" or not _decrypt_key(row.api_key_enc):
-            self.provider_name = (row.name if row else "mock")
-            return get_mock()
 
-        from ai.llm_provider import get_provider as get_llm
-        timeout = settings.llm_timeout
-        self.provider_name = row.name
-        return get_llm(row.base_url, _decrypt_key(row.api_key_enc), row.model_name, timeout=timeout)
+        row_is_real = (
+            row is not None
+            and row.provider != "mock"
+            and bool(_decrypt_key(row.api_key_enc))
+        )
+        if row_is_real:
+            from ai.llm_provider import get_provider as get_llm
+            self.provider_name = row.name
+            self._model_name = row.model_name
+            return get_llm(row.base_url, _decrypt_key(row.api_key_enc), row.model_name, timeout=settings.llm_timeout)
+
+        if settings.llm_api_key and settings.llm_base_url and settings.llm_model:
+            from ai.llm_provider import get_provider as get_llm
+            self.provider_name = row.name if row else "config-llm"
+            self._model_name = settings.llm_model
+            return get_llm(settings.llm_base_url, settings.llm_api_key, settings.llm_model, timeout=settings.llm_timeout)
+
+        self.provider_name = (row.name if row else "mock")
+        self._model_name = (row.model_name if row else "mock")
+        return get_mock()
 
     def _log_call_start(
         self,
@@ -103,7 +119,7 @@ class AiService:
             version_id=version_id,
             task_key=task_key,
             provider_id=provider.id if provider else None,
-            model_name=provider.model_name if provider else "mock",
+            model_name=getattr(self, "_model_name", None) or (provider.model_name if provider else "mock"),
             status="streaming",
             request_body=request_body,
             created_at=datetime.utcnow(),

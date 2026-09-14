@@ -142,8 +142,8 @@ class WorkerPool:
             svc._get_provider(task.task_key)
             provider_row = svc._provider_row
             task.provider_id = provider_row.id if provider_row else None
-            task.provider_name = provider_row.name if provider_row else "mock"
-            task.model_name = provider_row.model_name if provider_row else "mock"
+            task.provider_name = svc.provider_name or "mock"
+            task.model_name = svc._model_name or "mock"
             task.skill_name = skill.name
             db.commit()
 

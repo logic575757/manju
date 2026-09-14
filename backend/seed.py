@@ -160,12 +160,15 @@ def seed_prompts(db):
             )
             db.add(prompt)
         else:
-            # 内置 v1 prompt：若系统 prompt 明显比库里长（初次升级）则更新到新版本；
+            # 内置 v1 prompt：系统 prompt 明显升级时整体刷新；仅用户模板变化时只同步模板。
             # 用户自定义 prompt 请另存新版本（如 v2），本分支不会覆盖。
             new_sys = p["system_prompt"]
+            new_tpl = p["user_prompt_template"]
             if exists.system_prompt != new_sys and len(exists.system_prompt) < len(new_sys) - 50:
                 exists.system_prompt = new_sys
-                exists.user_prompt_template = p["user_prompt_template"]
+                exists.user_prompt_template = new_tpl
+            elif exists.user_prompt_template != new_tpl:
+                exists.user_prompt_template = new_tpl
     db.commit()
 
 

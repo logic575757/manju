@@ -2376,6 +2376,8 @@ input[type="checkbox"] {
             <div class="wf-card rounded-xl p-4">
               <label class="block text-xs text-muted-foreground mb-1.5">粘贴小说/剧本文本</label>
               <textarea id="impText" class="mock-textarea" style="min-height:160px;" placeholder="粘贴文本，或点击下方上传区域导入文件..."></textarea>
+              <label class="block text-xs text-muted-foreground mb-1.5 mt-3">自由提示词（补充要求）</label>
+              <textarea id="impPrompt" class="mock-textarea" style="min-height:72px;" placeholder="可填写对改编方向、人物、节奏、钩子等的要求，留空则按默认规则生成..."></textarea>
               <div id="impDropzone" class="wf-placeholder h-20 rounded-xl mt-3 cursor-pointer" onclick="alert('打开文件选择器（原型占位）')">
                 拖拽或点击上传 .txt / .docx / .pdf
               </div>
@@ -6079,6 +6081,7 @@ input[type="checkbox"] {
     // 导入路径
     const imp = {
       text: (document.getElementById('impText')?.value) || '',
+      prompt: (document.getElementById('impPrompt')?.value) || '',
       fileName: (document.getElementById('impFileName')?.textContent) || '',
       episodes: parseInt(document.getElementById('impEpisodes')?.value, 10) || 10,
       episodesFree: !!(document.getElementById('impEpisodesFree')?.checked),
@@ -6121,6 +6124,7 @@ input[type="checkbox"] {
     if (p.imp) {
       const m = p.imp;
       if (document.getElementById('impText')) document.getElementById('impText').value = m.text || '';
+      if (document.getElementById('impPrompt')) document.getElementById('impPrompt').value = m.prompt || '';
       if (document.getElementById('impEpisodes')) document.getElementById('impEpisodes').value = m.episodes || 10;
       if (document.getElementById('impEpisodesFree')) document.getElementById('impEpisodesFree').checked = !!m.episodesFree;
       if (document.getElementById('impEpDuration')) document.getElementById('impEpDuration').value = m.epDuration || 90;
@@ -6318,6 +6322,7 @@ input[type="checkbox"] {
 
   function clearImportForm() {
     if (document.getElementById('impText')) document.getElementById('impText').value = '';
+    if (document.getElementById('impPrompt')) document.getElementById('impPrompt').value = '';
     if (document.getElementById('impEpisodes')) document.getElementById('impEpisodes').value = 10;
     if (document.getElementById('impEpisodesFree')) document.getElementById('impEpisodesFree').checked = false;
     if (typeof toggleEpisodesFree === 'function') toggleEpisodesFree();
@@ -7760,6 +7765,7 @@ input[type="checkbox"] {
       episodes_free: !!params.episodes_free,
       ep_duration: parseInt(params.ep_duration, 10) || 90,
       tone: params.tone || '保持原作风味',
+      prompt: params.prompt || '',
     };
     submitAiTask(scriptId, 'short-drama-half-outline', '短剧半套大纲', () => ApiClient.ai.halfOutline(scriptId, halfParams));
   }
@@ -7930,6 +7936,7 @@ input[type="checkbox"] {
     const epCount = parseInt(imp.episodes, 10) || parseInt((document.getElementById('impEpisodes')||{}).value, 10) || 10;
     const epDur = parseInt(imp.epDuration, 10) || parseInt((document.getElementById('impEpDuration')||{}).value, 10) || 90;
     const tone = imp.tone || (document.getElementById('impTone')||{}).value || '保持原作风味';
+    const freePrompt = (imp.prompt != null ? imp.prompt : (document.getElementById('impPrompt')||{}).value) || '';
     let text = raw;
     let fileName = imp.fileName || '粘贴文本';
     if (fileInput && fileInput.files && fileInput.files[0]) {
@@ -7948,6 +7955,7 @@ input[type="checkbox"] {
       episodes_free: episodesFree,
       ep_duration: epDur,
       tone: tone,
+      prompt: freePrompt,
     };
     _shortDramaDispatchCtx = {
       scriptId: currentScriptId,
@@ -7955,12 +7963,13 @@ input[type="checkbox"] {
       params: halfParams,
       storyText: text,
     };
+    const extraRequirement = [tone, freePrompt].filter(Boolean).join('；');
     await submitAiTask(currentScriptId, 'dispatch_short_drama', '路由判断', () =>
       ApiClient.ai.dispatchShortDrama(currentScriptId, {
         story_text: text,
         has_outline: false,
         user_intent: '大纲',
-        extra_requirement: tone || '',
+        extra_requirement: extraRequirement || '',
       })
     );
   }
@@ -8050,6 +8059,31 @@ input[type="checkbox"] {
   }
 
   // ---------- 分集生成 ----------
+  function _promptForFreeText(title, defaultValue, placeholder) {
+    return new Promise((resolve) => {
+      const old = document.getElementById('freePromptMask');
+      if (old) old.remove();
+      const mask = document.createElement('div');
+      mask.id = 'freePromptMask';
+      mask.className = 'fixed inset-0 bg-black/30 z-[120] flex items-center justify-center';
+      document.body.appendChild(mask);
+      mask.innerHTML = '<div class="bg-card border border-border rounded-xl wf-shadow-lg p-5 w-[420px] max-w-[90vw]">'
+        + '<div class="font-semibold text-sm mb-1">' + escapeHtml(title || '自由提示词') + '</div>'
+        + '<div class="text-xs text-muted-foreground mb-2">可填写生成要求，留空则按默认规则生成</div>'
+        + '<textarea id="freePromptInput" class="mock-textarea" style="min-height:120px;" placeholder="' + escapeHtml(placeholder || '例如：加强反转、保持男主人设、每集结尾加钩子…') + '">' + escapeHtml(defaultValue || '') + '</textarea>'
+        + '<div class="flex items-center gap-2 justify-end mt-4">'
+        + '<button type="button" id="freePromptCancel" class="wf-btn-ghost px-4 py-2 text-sm">取消</button>'
+        + '<button type="button" id="freePromptOk" class="wf-btn-primary px-4 py-2 text-sm">生成</button>'
+        + '</div></div>';
+      const ta = document.getElementById('freePromptInput');
+      if (ta) ta.focus();
+      const done = (v) => { mask.remove(); resolve(v); };
+      document.getElementById('freePromptCancel').onclick = () => done(null);
+      document.getElementById('freePromptOk').onclick = () => { const v = (ta ? ta.value : '').trim(); done(v); };
+      mask.onclick = function (e) { if (e.target === mask) done(null); };
+    });
+  }
+
   async function generateEpisodeContentBridge(id) {
     if (!currentScriptId) return showToast('请先打开剧本', 'error');
     id = id || currentEpisodeId || 1;
@@ -8058,8 +8092,10 @@ input[type="checkbox"] {
     if (!ep) return showToast('未找到分集', 'error');
     const idx = episodes.findIndex(e => String(e.id) === String(id));
     const previousEpisodes = idx > 0 ? episodes.slice(0, idx) : [];
+    const freePrompt = await _promptForFreeText('分集生成 · 自由提示词', '', '例如：本集强化反转、保持男主人设、结尾留悬念…');
+    if (freePrompt === null) return;
     await submitAiTask(currentScriptId, 'generate_episode', '生成分集：' + (ep.title || '第' + id + '集'),
-      () => ApiClient.ai.generateEpisode(currentScriptId, epId, outlineData.slice(), characterData.slice(), previousEpisodes));
+      () => ApiClient.ai.generateEpisode(currentScriptId, epId, outlineData.slice(), characterData.slice(), previousEpisodes, freePrompt));
   }
   window.generateEpisodeContent = generateEpisodeContentBridge;
 
@@ -8126,6 +8162,7 @@ input[type="checkbox"] {
       await refreshScriptMeta();
     }
     injectCharGenBtn();
+    await generateCharactersBridge();
   }
   window.confirmPassToStep2 = confirmPassToStep2Bridge;
 

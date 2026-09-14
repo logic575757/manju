@@ -320,7 +320,8 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 - 目标集数：{episodes_hint}
 - 单集时长：{ep_duration}秒
 - 情绪基调：{tone}
-- 文件名（参考）：{file_name}""",
+- 文件名（参考）：{file_name}
+- 自由提示词（补充要求）：{prompt}""",
     },
 
     "short-drama-full-script": {
@@ -721,7 +722,8 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 - 钩子位置(hookSec)：{hook_sec}秒
 - 断章位置(cliffSec)：{cliff_sec}秒
 - 画风/美术：{art_style}
-- 镜头表演要求：{shot_perf}""",
+- 镜头表演要求：{shot_perf}
+- 自由提示词（补充要求）：{prompt}""",
     },
 
     "review_episode": {
@@ -913,7 +915,8 @@ BUILTIN_PROMPTS: Dict[str, Dict[str, str]] = {
 - 目标集数：{episodes_hint}
 - 单集时长：{ep_duration}秒
 - 情绪基调：{tone}
-- 文件名（参考）：{file_name}""",
+- 文件名（参考）：{file_name}
+- 自由提示词（补充要求）：{prompt}""",
     },
 }
 

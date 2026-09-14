@@ -200,6 +200,7 @@ class AiGenerateEpisodeReq(BaseModel):
     ep_duration: int = 90
     sb_sec: int = 8
     pace: Optional[dict] = None
+    prompt: Optional[str] = ""
 
 
 class AiReviewEpisodeReq(BaseModel):
@@ -244,6 +245,7 @@ class AiParseImportReq(BaseModel):
     ep_duration: int = 90
     tone: str = "保持原作风味"
     script_id: Optional[int] = None
+    prompt: Optional[str] = ""
 
 
 class AiShortDramaHalfOutlineReq(BaseModel):
@@ -254,6 +256,7 @@ class AiShortDramaHalfOutlineReq(BaseModel):
     ep_duration: int = 90
     tone: str = "保持原作风味"
     script_id: Optional[int] = None
+    prompt: Optional[str] = ""
 
 
 class AiShortDramaFullScriptReq(BaseModel):

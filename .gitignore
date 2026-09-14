@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+
+# Logs
+*.log
+nohup.out
+
+# Local env overrides (backend/.env 保留在仓库内，本地覆盖用这个)
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
